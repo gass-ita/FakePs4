@@ -1,0 +1,44 @@
+# ==========================================
+# Build Directories (Custom defined in .pro)
+# ==========================================
+/bin/
+/build/
+
+# ==========================================
+# qmake Generated Files
+# ==========================================
+Makefile
+Makefile.Debug
+Makefile.Release
+*.pro.user
+*.pro.user.*
+
+# ==========================================
+# IDEs and Editors
+# ==========================================
+# VS Code
+.vscode/
+*.code-workspace
+
+# ==========================================
+# OS Generated Files
+# ==========================================
+# Linux
+*~
+.directory
+
+# Windows / macOS (Good practice to include)
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# ==========================================
+# Fallback Compiled C++ / Object Files
+# ==========================================
+*.o
+*.obj
+*.out
+*.so
+*.a
+*.dll
+*.dylib
