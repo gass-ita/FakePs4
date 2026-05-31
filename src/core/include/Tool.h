@@ -28,6 +28,7 @@ public:
     virtual void onPress(int x, int y, LayerManager &manager) = 0;
     virtual void onMove(int x, int y, LayerManager &manager) = 0;
     virtual void onRelease(int x, int y, LayerManager &manager) = 0;
+    virtual void onHover(int /*x*/, int /*y*/, LayerManager & /*manager*/) {}
 };
 
 class BrushTool : public Tool
@@ -36,6 +37,7 @@ public:
     void onPress(int x, int y, LayerManager &manager) override;
     void onMove(int x, int y, LayerManager &manager) override;
     void onRelease(int x, int y, LayerManager &manager) override;
+    void onHover(int x, int y, LayerManager &manager) override;
 
 private:
     int lastX = 0, lastY = 0;
@@ -48,6 +50,10 @@ public:
     void onPress(int x, int y, LayerManager &manager) override;
     void onMove(int x, int y, LayerManager &manager) override;
     void onRelease(int x, int y, LayerManager &manager) override;
+
+private:
+    int startX = 0, startY = 0;
+    bool isDrawing = false;
 };
 
 // Tool 4: The Ellipse Stamp
@@ -57,6 +63,10 @@ public:
     void onPress(int x, int y, LayerManager &manager) override;
     void onMove(int x, int y, LayerManager &manager) override;
     void onRelease(int x, int y, LayerManager &manager) override;
+
+private:
+    int startX = 0, startY = 0;
+    bool isDrawing = false;
 };
 
 // Tool 3: The Eraser
@@ -66,6 +76,7 @@ public:
     void onPress(int x, int y, LayerManager &manager) override;
     void onMove(int x, int y, LayerManager &manager) override;
     void onRelease(int x, int y, LayerManager &manager) override;
+    void onHover(int x, int y, LayerManager &manager) override;
 
 private:
     int lastX = 0, lastY = 0;

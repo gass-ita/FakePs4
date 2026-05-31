@@ -53,4 +53,14 @@ public:
     void draw(LayerManager &manager) const override;
 };
 
+class CircleOutline : public Shape
+{
+public:
+    int xc, yc, size;
+    uint8_t r, g, b, a;
+
+    CircleOutline(int xc, int yc, int size, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+    void draw(LayerManager &manager) const override;
+};
+
 #endif // SHAPE_H

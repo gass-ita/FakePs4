@@ -5,8 +5,12 @@
 LayerManager::LayerManager(int width, int height)
     : width(width), height(height)
 {
+    previewLayer = std::make_shared<Layer>(width, height, "Preview Layer");
     projectionCache.resize(width * height * 4, 0);
     addLayer("Background");
+    // Start with a solid white background
+    layers.back()->fill(255, 255, 255, 255);
+    markRegionDirty(0, 0, width, height);
 }
 
 void LayerManager::addLayer(const std::string &name)
@@ -40,10 +44,16 @@ void LayerManager::setActiveLayer(size_t index)
 // Modify your existing setPixel:
 void LayerManager::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    if (activeLayerIndex >= layers.size())
-        return;
-
-    layers[activeLayerIndex]->setPixel(x, y, r, g, b, a);
+    if (isPreviewMode)
+    {
+        previewLayer->setPixel(x, y, r, g, b, a);
+    }
+    else
+    {
+        if (activeLayerIndex >= layers.size())
+            return;
+        layers[activeLayerIndex]->setPixel(x, y, r, g, b, a);
+    }
 
     if (isBatching)
     {
@@ -128,6 +138,28 @@ std::vector<uint8_t> LayerManager::renderRegion(int startX, int startY, int rWid
                   regionBuffer.begin() + localIdx);
     }
 
+    // Blend the preview layer on top of the region buffer
+    for (int y = 0; y < h; ++y)
+    {
+        for (int x = 0; x < w; ++x)
+        {
+            int localIdx = (y * w + x) * 4;
+            int globalIdx = ((y0 + y) * width + (x0 + x)) * 4;
+
+            uint8_t &br = regionBuffer[localIdx];
+            uint8_t &bg = regionBuffer[localIdx + 1];
+            uint8_t &bb = regionBuffer[localIdx + 2];
+            uint8_t &ba = regionBuffer[localIdx + 3];
+
+            uint8_t tr = previewLayer->pixels[globalIdx];
+            uint8_t tg = previewLayer->pixels[globalIdx + 1];
+            uint8_t tb = previewLayer->pixels[globalIdx + 2];
+            uint8_t ta = previewLayer->pixels[globalIdx + 3];
+
+            blendPixels(br, bg, bb, ba, tr, tg, tb, ta, 1.0f);
+        }
+    }
+
     return regionBuffer;
 }
 
@@ -206,4 +238,15 @@ void LayerManager::setLayerName(size_t index, const std::string &name)
     // Assuming your Layer class has a public 'name' string property
     // If not, you may need to add it to Layer.h!
     layers[index]->name = name;
+}
+
+void LayerManager::setPreviewMode(bool active)
+{
+    isPreviewMode = active;
+}
+
+void LayerManager::clearPreview()
+{
+    previewLayer->clear();
+    markRegionDirty(0, 0, width, height);
 }

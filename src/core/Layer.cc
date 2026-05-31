@@ -27,3 +27,14 @@ void Layer::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
     pixels[index + 2] = b;
     pixels[index + 3] = a;
 }
+
+void Layer::fill(uint8_t fillR, uint8_t fillG, uint8_t fillB, uint8_t fillA)
+{
+    for (size_t i = 0; i < pixels.size(); i += 4)
+    {
+        pixels[i] = fillR;
+        pixels[i + 1] = fillG;
+        pixels[i + 2] = fillB;
+        pixels[i + 3] = fillA;
+    }
+}

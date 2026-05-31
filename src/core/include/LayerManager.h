@@ -22,6 +22,10 @@ private:
     int batchMinX = 0, batchMinY = 0, batchMaxX = 0, batchMaxY = 0;
     std::vector<uint8_t> projectionCache;
 
+    // preview layer
+    std::shared_ptr<Layer> previewLayer;
+    bool isPreviewMode = false;
+
 public:
     LayerManager(int width, int height);
 
@@ -49,6 +53,10 @@ public:
 
     void setLayerVisibility(size_t index, bool visible);
     void setLayerName(size_t index, const std::string &name);
+
+    // preview layer
+    void setPreviewMode(bool active);
+    void clearPreview();
 
 private:
     // Helper function for the alpha blending math

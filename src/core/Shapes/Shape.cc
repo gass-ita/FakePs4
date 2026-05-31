@@ -14,44 +14,87 @@ void Line::draw(LayerManager &manager) const
     int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
     int err = dx + dy, e2;
 
-    // Calculate radius once
-    int radius = thickness / 2;
-    int radiusSquared = radius * radius;
-
-    while (true)
+    if (thickness <= 1)
     {
-        if (thickness <= 1)
+        // Standard Bresenham for fast, 1-pixel thin lines
+        while (true)
         {
             manager.setPixel(x_curr, y_curr, r, g, b, a);
+            if (x_curr == x1 && y_curr == y1)
+                break;
+
+            e2 = 2 * err;
+            if (e2 >= dy)
+            {
+                err += dy;
+                x_curr += sx;
+            }
+            if (e2 <= dx)
+            {
+                err += dx;
+                y_curr += sy;
+            }
         }
-        else
+    }
+    else
+    {
+        // Professional Step-Stamping for thick lines
+        int radius = thickness / 2;
+        int radiusSquared = radius * radius;
+
+        // 25% spacing for a smooth edge without burning CPU
+        float spacing = std::max(1.0f, radius * 0.25f);
+        float distSinceLastStamp = spacing; // Start ready to stamp immediately
+
+        // Helper lambda to stamp a solid circle at a given center coordinate
+        auto stampCircle = [&](int cx_center, int cy_center)
         {
-            // Stamp a solid circle at the current Bresenham coordinate
             for (int cy = -radius; cy <= radius; cy++)
             {
                 for (int cx = -radius; cx <= radius; cx++)
                 {
                     if (cx * cx + cy * cy <= radiusSquared)
                     {
-                        manager.setPixel(x_curr + cx, y_curr + cy, r, g, b, a);
+                        manager.setPixel(cx_center + cx, cy_center + cy, r, g, b, a);
                     }
                 }
             }
+        };
+
+        // Main line traversal loop
+        while (true)
+        {
+            if (distSinceLastStamp >= spacing)
+            {
+                stampCircle(x_curr, y_curr);
+                distSinceLastStamp = 0.0f; // Reset counter
+            }
+
+            if (x_curr == x1 && y_curr == y1)
+                break;
+
+            e2 = 2 * err;
+            bool steppedX = false, steppedY = false;
+
+            if (e2 >= dy)
+            {
+                err += dy;
+                x_curr += sx;
+                steppedX = true;
+            }
+            if (e2 <= dx)
+            {
+                err += dx;
+                y_curr += sy;
+                steppedY = true;
+            }
+
+            // Add actual distance moved (~1.414 for diagonal, 1.0 for straight)
+            distSinceLastStamp += (steppedX && steppedY) ? 1.414f : 1.0f;
         }
 
-        if (x_curr == x1 && y_curr == y1)
-            break;
-        e2 = 2 * err;
-        if (e2 >= dy)
-        {
-            err += dy;
-            x_curr += sx;
-        }
-        if (e2 <= dx)
-        {
-            err += dx;
-            y_curr += sy;
-        }
+        // CRITICAL: Always stamp the final cap to ensure the line ends perfectly round
+        stampCircle(x1, y1);
     }
 }
 
@@ -160,6 +203,51 @@ void Ellipse::draw(LayerManager &manager) const
             x++;
             px += 2 * rySq;
             p2 += rxSq - py + px;
+        }
+    }
+}
+
+// Add the implementation:
+CircleOutline::CircleOutline(int xc, int yc, int size, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+    : xc(xc), yc(yc), size(size), r(r), g(g), b(b), a(a) {}
+
+void CircleOutline::draw(LayerManager &manager) const
+{
+    int radius = size / 2;
+    if (radius == 0)
+    { // If size is 1, just draw a dot
+        manager.setPixel(xc, yc, r, g, b, a);
+        return;
+    }
+
+    int x = 0, y = radius;
+    int d = 3 - 2 * radius;
+
+    // Helper lambda to draw the 8 symmetric points of a circle outline
+    auto drawSymmetric = [&](int cx, int cy)
+    {
+        manager.setPixel(xc + cx, yc + cy, r, g, b, a);
+        manager.setPixel(xc - cx, yc + cy, r, g, b, a);
+        manager.setPixel(xc + cx, yc - cy, r, g, b, a);
+        manager.setPixel(xc - cx, yc - cy, r, g, b, a);
+        manager.setPixel(xc + cy, yc + cx, r, g, b, a);
+        manager.setPixel(xc - cy, yc + cx, r, g, b, a);
+        manager.setPixel(xc + cy, yc - cx, r, g, b, a);
+        manager.setPixel(xc - cy, yc - cx, r, g, b, a);
+    };
+
+    while (y >= x)
+    {
+        drawSymmetric(x, y);
+        x++;
+        if (d > 0)
+        {
+            y--;
+            d = d + 4 * (x - y) + 10;
+        }
+        else
+        {
+            d = d + 4 * x + 6;
         }
     }
 }
