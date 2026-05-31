@@ -5,6 +5,7 @@
 LayerManager::LayerManager(int width, int height)
     : width(width), height(height)
 {
+    previewLayer = std::make_shared<Layer>(width, height, "Preview Layer");
     projectionCache.resize(width * height * 4, 0);
     addLayer("Background");
     // Start with a solid white background
@@ -22,9 +23,10 @@ void LayerManager::addObserver(LMObserver *observer)
     observers.push_back(observer);
 }
 
-void LayerManager::markRegionDirty(int x, int y, int w, int h)
+void LayerManager::markRegionDirty(int x, int y, int w, int h, bool skipCache)
 {
-    updateCache(x, y, w, h);
+    if (!skipCache)
+        updateCache(x, y, w, h);
 
     for (auto *observer : observers)
     {
@@ -131,6 +133,37 @@ std::vector<uint8_t> LayerManager::renderRegion(int startX, int startY, int rWid
                   regionBuffer.begin() + localIdx);
     }
 
+    // add the preview layer on top of the cache if it has any pixels in this region
+    if (previewLayer)
+    {
+        for (int y = 0; y < h; ++y)
+        {
+            for (int x = 0; x < w; ++x)
+            {
+                int localIdx = (y * w + x) * 4;
+                int globalIdx = ((y0 + y) * width + (x0 + x)) * 4;
+
+                uint8_t ta = previewLayer->pixels[globalIdx + 3];
+
+                // Only do math if the preview pixel exists
+                if (ta > 0)
+                {
+                    uint8_t tr = previewLayer->pixels[globalIdx];
+                    uint8_t tg = previewLayer->pixels[globalIdx + 1];
+                    uint8_t tb = previewLayer->pixels[globalIdx + 2];
+
+                    uint8_t &br = regionBuffer[localIdx];
+                    uint8_t &bg = regionBuffer[localIdx + 1];
+                    uint8_t &bb = regionBuffer[localIdx + 2];
+                    uint8_t &ba = regionBuffer[localIdx + 3];
+
+                    // Standard Alpha Compositing directly into the buffer
+                    blendPixels(br, bg, bb, ba, tr, tg, tb, ta, 1.0f);
+                }
+            }
+        }
+    }
+
     return regionBuffer;
 }
 
@@ -209,4 +242,71 @@ void LayerManager::setLayerName(size_t index, const std::string &name)
     // Assuming your Layer class has a public 'name' string property
     // If not, you may need to add it to Layer.h!
     layers[index]->name = name;
+}
+
+// --- PREVIEW LOGIC ---
+void LayerManager::setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    // std::cout << "Setting preview pixel at (" << x << ", " << y << ") to color ("
+    //         << static_cast<int>(r) << ", " << static_cast<int>(g) << ", "
+    //       << static_cast<int>(b) << ", " << static_cast<int>(a) << ")\n";
+    previewLayer->setPixel(x, y, r, g, b, a);
+
+    // Expand the tracking bounding box
+    if (prevMaxX == -1)
+    {
+        prevMinX = x;
+        prevMaxX = x;
+        prevMinY = y;
+        prevMaxY = y;
+    }
+    else
+    {
+        prevMinX = std::min(prevMinX, x);
+        prevMinY = std::min(prevMinY, y);
+        prevMaxX = std::max(prevMaxX, x);
+        prevMaxY = std::max(prevMaxY, y);
+    }
+}
+
+void LayerManager::clearPreview()
+{
+    if (prevMaxX == -1)
+        return; // Already empty!
+
+    int x0 = std::max(0, prevMinX);
+    int y0 = std::max(0, prevMinY);
+    int x1 = std::min(width - 1, prevMaxX);
+    int y1 = std::min(height - 1, prevMaxY);
+
+    // Wipe ONLY the exact box that was drawn
+    for (int y = y0; y <= y1; ++y)
+    {
+        for (int x = x0; x <= x1; ++x)
+        {
+            int idx = (y * width + x) * 4;
+            previewLayer->pixels[idx] = 0;
+            previewLayer->pixels[idx + 1] = 0;
+            previewLayer->pixels[idx + 2] = 0;
+            previewLayer->pixels[idx + 3] = 0;
+        }
+    }
+
+    // Tell Qt to repaint this wiped box (true = Skip Cache!)
+    markRegionDirty(x0, y0, x1 - x0 + 1, y1 - y0 + 1, true);
+
+    // Reset the bounding box
+    prevMinX = width;
+    prevMinY = height;
+    prevMaxX = -1;
+    prevMaxY = -1;
+}
+
+void LayerManager::showPreview()
+{
+    // Tell Qt to repaint the newly drawn preview box (true = Skip Cache!)
+    if (prevMaxX != -1)
+    {
+        markRegionDirty(prevMinX, prevMinY, prevMaxX - prevMinX + 1, prevMaxY - prevMinY + 1, true);
+    }
 }

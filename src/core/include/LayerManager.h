@@ -22,6 +22,11 @@ private:
     int batchMinX = 0, batchMinY = 0, batchMaxX = 0, batchMaxY = 0;
     std::vector<uint8_t> projectionCache;
 
+    // preview logic
+    std::shared_ptr<Layer> previewLayer;
+    int prevMinX = 0, prevMinY = 0;
+    int prevMaxX = -1, prevMaxY = -1;
+
 public:
     LayerManager(int width, int height);
 
@@ -29,7 +34,7 @@ public:
 
     void addObserver(LMObserver *observer);
 
-    void markRegionDirty(int x, int y, int w, int h);
+    void markRegionDirty(int x, int y, int w, int h, bool skipCache = false);
 
     std::vector<uint8_t> render() const;
 
@@ -49,6 +54,12 @@ public:
 
     void setLayerVisibility(size_t index, bool visible);
     void setLayerName(size_t index, const std::string &name);
+
+    // preview logic
+    void clearPreview();
+
+    void setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+    void showPreview();
 
 private:
     // Helper function for the alpha blending math

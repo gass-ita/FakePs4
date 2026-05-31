@@ -5,7 +5,7 @@
 #include "Shape.h"
 
 Canvas::Canvas(QWidget *parent)
-    : QWidget(parent), layerManager(1920, 1080)
+    : QWidget(parent), layerManager(3840, 2160)
 {
     // setFixedSize(layerManager.getWidth(), layerManager.getHeight());
     layerManager.addObserver(this);

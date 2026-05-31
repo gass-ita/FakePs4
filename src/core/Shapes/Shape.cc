@@ -5,7 +5,7 @@
 Line::Line(int x0, int y0, int x1, int y1, uint8_t r, uint8_t g, uint8_t b, uint8_t a, int thickness)
     : x0(x0), y0(y0), x1(x1), y1(y1), r(r), g(g), b(b), a(a), thickness(thickness) {}
 
-void Line::draw(LayerManager &manager) const
+void Line::draw(LayerManager &manager, PixelSetter setter) const
 {
     int x_curr = x0;
     int y_curr = y0;
@@ -19,7 +19,7 @@ void Line::draw(LayerManager &manager) const
         // Standard Bresenham for fast, 1-pixel thin lines
         while (true)
         {
-            manager.setPixel(x_curr, y_curr, r, g, b, a);
+            (manager.*setter)(x_curr, y_curr, r, g, b, a);
             if (x_curr == x1 && y_curr == y1)
                 break;
 
@@ -55,7 +55,7 @@ void Line::draw(LayerManager &manager) const
                 {
                     if (cx * cx + cy * cy <= radiusSquared)
                     {
-                        manager.setPixel(cx_center + cx, cy_center + cy, r, g, b, a);
+                        (manager.*setter)(cx_center + cx, cy_center + cy, r, g, b, a);
                     }
                 }
             }
@@ -104,12 +104,12 @@ void ShapeGroup::addShape(std::shared_ptr<Shape> shape)
     children.push_back(shape);
 }
 
-void ShapeGroup::draw(LayerManager &manager) const
+void ShapeGroup::draw(LayerManager &manager, PixelSetter setter) const
 {
     // A group simply tells all its children to draw themselves!
     for (const auto &child : children)
     {
-        child->draw(manager);
+        child->draw(manager, setter);
     }
 }
 
@@ -129,7 +129,7 @@ Rectangle::Rectangle(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b
 Ellipse::Ellipse(int xc, int yc, int rx, int ry, uint8_t r, uint8_t g, uint8_t b, uint8_t a, int thickness)
     : xc(xc), yc(yc), rx(rx), ry(ry), r(r), g(g), b(b), a(a), thickness(thickness) {}
 
-void Ellipse::draw(LayerManager &manager) const
+void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
 {
     int radius = thickness / 2;
     int radiusSquared = radius * radius;
@@ -139,7 +139,7 @@ void Ellipse::draw(LayerManager &manager) const
     {
         if (thickness <= 1)
         {
-            manager.setPixel(cx, cy, r, g, b, a);
+            (manager.*setter)(cx, cy, r, g, b, a);
         }
         else
         {
@@ -149,7 +149,7 @@ void Ellipse::draw(LayerManager &manager) const
                 {
                     if (cx_off * cx_off + cy_off * cy_off <= radiusSquared)
                     {
-                        manager.setPixel(cx + cx_off, cy + cy_off, r, g, b, a);
+                        (manager.*setter)(cx + cx_off, cy + cy_off, r, g, b, a);
                     }
                 }
             }
@@ -211,12 +211,12 @@ void Ellipse::draw(LayerManager &manager) const
 CircleOutline::CircleOutline(int xc, int yc, int size, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
     : xc(xc), yc(yc), size(size), r(r), g(g), b(b), a(a) {}
 
-void CircleOutline::draw(LayerManager &manager) const
+void CircleOutline::draw(LayerManager &manager, PixelSetter setter) const
 {
     int radius = size / 2;
     if (radius == 0)
     { // If size is 1, just draw a dot
-        manager.setPixel(xc, yc, r, g, b, a);
+        (manager.*setter)(xc, yc, r, g, b, a);
         return;
     }
 
@@ -226,14 +226,14 @@ void CircleOutline::draw(LayerManager &manager) const
     // Helper lambda to draw the 8 symmetric points of a circle outline
     auto drawSymmetric = [&](int cx, int cy)
     {
-        manager.setPixel(xc + cx, yc + cy, r, g, b, a);
-        manager.setPixel(xc - cx, yc + cy, r, g, b, a);
-        manager.setPixel(xc + cx, yc - cy, r, g, b, a);
-        manager.setPixel(xc - cx, yc - cy, r, g, b, a);
-        manager.setPixel(xc + cy, yc + cx, r, g, b, a);
-        manager.setPixel(xc - cy, yc + cx, r, g, b, a);
-        manager.setPixel(xc + cy, yc - cx, r, g, b, a);
-        manager.setPixel(xc - cy, yc - cx, r, g, b, a);
+        (manager.*setter)(xc + cx, yc + cy, r, g, b, a);
+        (manager.*setter)(xc - cx, yc + cy, r, g, b, a);
+        (manager.*setter)(xc + cx, yc - cy, r, g, b, a);
+        (manager.*setter)(xc - cx, yc - cy, r, g, b, a);
+        (manager.*setter)(xc + cy, yc + cx, r, g, b, a);
+        (manager.*setter)(xc - cy, yc + cx, r, g, b, a);
+        (manager.*setter)(xc + cy, yc - cx, r, g, b, a);
+        (manager.*setter)(xc - cy, yc - cx, r, g, b, a);
     };
 
     while (y >= x)
