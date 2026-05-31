@@ -182,3 +182,28 @@ void LayerManager::endBatch()
         markRegionDirty(batchMinX, batchMinY, batchMaxX - batchMinX + 1, batchMaxY - batchMinY + 1);
     }
 }
+
+void LayerManager::setLayerVisibility(size_t index, bool visible)
+{
+    if (index >= layers.size())
+        return;
+
+    // Only recalculate if the visibility actually changed
+    if (layers[index]->visible != visible)
+    {
+        layers[index]->visible = visible;
+
+        // CRITICAL: If a layer disappears or appears, the entire cache is invalid.
+        // We must tell the observer to redraw the entire width and height of the canvas.
+        markRegionDirty(0, 0, width, height);
+    }
+}
+
+void LayerManager::setLayerName(size_t index, const std::string &name)
+{
+    if (index >= layers.size())
+        return;
+    // Assuming your Layer class has a public 'name' string property
+    // If not, you may need to add it to Layer.h!
+    layers[index]->name = name;
+}

@@ -11,23 +11,21 @@ class Shape
 {
 public:
     virtual ~Shape() = default;
-
-    // Every shape must know how to draw itself onto the manager
     virtual void draw(LayerManager &manager) const = 0;
 };
 
-// 2. The Leaf (Primitive)
 class Line : public Shape
 {
 public:
     int x0, y0, x1, y1;
     uint8_t r, g, b, a;
+    int thickness;
 
-    Line(int x0, int y0, int x1, int y1, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+    Line(int x0, int y0, int x1, int y1, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int thickness = 1);
     void draw(LayerManager &manager) const override;
 };
 
-// 3. The Composite
+// composite shape
 class ShapeGroup : public Shape
 {
 public:
@@ -37,11 +35,22 @@ public:
     void draw(LayerManager &manager) const override;
 };
 
-// 4. Proving the Pattern: A Rectangle composed of 4 lines!
 class Rectangle : public ShapeGroup
 {
 public:
-    Rectangle(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+    Rectangle(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int thickness = 1);
+};
+
+class Ellipse : public Shape
+{
+public:
+    int xc, yc; // Center coordinates
+    int rx, ry; // X-radius and Y-radius
+    uint8_t r, g, b, a;
+    int thickness;
+
+    Ellipse(int xc, int yc, int rx, int ry, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int thickness = 1);
+    void draw(LayerManager &manager) const override;
 };
 
 #endif // SHAPE_H

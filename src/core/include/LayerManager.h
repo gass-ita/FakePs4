@@ -47,6 +47,9 @@ public:
     int getWidth() const { return width; }
     int getHeight() const { return height; }
 
+    void setLayerVisibility(size_t index, bool visible);
+    void setLayerName(size_t index, const std::string &name);
+
 private:
     // Helper function for the alpha blending math
     void blendPixels(uint8_t &outR, uint8_t &outG, uint8_t &outB, uint8_t &outA,
