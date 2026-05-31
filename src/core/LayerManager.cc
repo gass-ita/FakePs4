@@ -9,7 +9,7 @@ LayerManager::LayerManager(int width, int height)
     addLayer("Background");
     // Start with a solid white background
     layers.back()->fill(255, 255, 255, 255);
-    // markRegionDirty(0, 0, width, height);
+    markRegionDirty(0, 0, width, height);
 }
 
 void LayerManager::addLayer(const std::string &name)
