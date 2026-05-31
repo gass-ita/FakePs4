@@ -195,7 +195,5 @@ void Canvas::paintEvent(QPaintEvent *event)
 // 3. Add the leaveEvent at the bottom of the file
 void Canvas::leaveEvent(QEvent *event)
 {
-    // Hide the hover cursor when the mouse leaves the widget
-    layerManager.clearPreview();
     QWidget::leaveEvent(event);
 }
