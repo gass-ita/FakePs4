@@ -10,6 +10,10 @@
 #include <QPushButton>
 #include <QPainter>
 #include <QMenu>
+#include <QFileDialog>
+#include <QStandardPaths>
+#include <QMessageBox>
+#include <QShortcut>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
@@ -174,6 +178,68 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             // When they hit Enter, your existing itemChanged signal will catch it!
             layerList->editItem(item);
         } });
+
+        // Saving and Loading
+        // ==========================================
+        // SAVE NATIVE PROJECT (Ctrl+S)
+        // ==========================================
+        QShortcut *saveShortcut = new QShortcut(QKeySequence::Save, this);
+        connect(saveShortcut, &QShortcut::activated, this, [this]()
+                {
+        QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/untitled.ptproj";
+        QString filePath = QFileDialog::getSaveFileName(this, "Save Project", defaultPath, "Paint Project (*.ptproj)");
+
+        if (!filePath.isEmpty()) {
+            if (!canvas->getLayerManager().saveProject(filePath.toStdString())) {
+                QMessageBox::critical(this, "Error", "Failed to save project.");
+            }
+        } });
+
+        // ==========================================
+        // LOAD NATIVE PROJECT (Ctrl+O)
+        // ==========================================
+        QShortcut *openShortcut = new QShortcut(QKeySequence::Open, this);
+        connect(openShortcut, &QShortcut::activated, this, [this]()
+                {
+        QString filePath = QFileDialog::getOpenFileName(this, "Open Project", "", "Paint Project (*.ptproj)");
+
+        if (!filePath.isEmpty()) {
+            if (!canvas->getLayerManager().loadProject(filePath.toStdString())) {
+                QMessageBox::critical(this, "Error", "File is corrupted or not a valid project.");
+            } else {
+                // Resize the actual Qt Window widget if the loaded canvas is a different size!
+                canvas->setFixedSize(canvas->getLayerManager().getWidth(), canvas->getLayerManager().getHeight());
+            }
+        } });
+
+        // Note the captured variables in the brackets: [this, layerList, createLayerItem]
+        connect(canvas, &Canvas::coreLayerListChanged, this, [this, layerList, createLayerItem]()
+                {
+            // 1. Temporarily block signals so clearing the list doesn't trigger active layer changes
+            layerList->blockSignals(true);
+            
+            // 2. Clear the Qt List Widget completely
+            layerList->clear(); 
+
+            // 3. Ask the core engine for the current layers
+            const auto& layers = canvas->getLayerManager().getLayers();
+
+            for (size_t i = 0; i < layers.size(); ++i)
+            {
+
+                    QListWidgetItem *item = createLayerItem(QString::fromStdString(layers[i]->name));
+
+                    // Restore visibility checkboxes
+                    item->setCheckState(layers[i]->visible ? Qt::Checked : Qt::Unchecked);
+
+                    layerList->addItem(item);
+            }
+
+            // 5. Set the UI selection to match the active layer
+            layerList->setCurrentRow(layers.size() - 1 - canvas->getLayerManager().getActiveLayerIndex());
+            
+            // 6. Unblock signals so the user can click on layers again
+            layerList->blockSignals(false); });
 
         adjustSize();
 }

@@ -51,6 +51,8 @@ public:
     // GETTERS for width and height
     int getWidth() const { return width; }
     int getHeight() const { return height; }
+    const std::vector<std::shared_ptr<Layer>> &getLayers() const { return layers; }
+    size_t getActiveLayerIndex() const { return activeLayerIndex; }
 
     void setLayerVisibility(size_t index, bool visible);
     void setLayerName(size_t index, const std::string &name);
@@ -60,6 +62,10 @@ public:
 
     void setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
     void showPreview();
+
+    // saving and loading
+    bool saveProject(const std::string &filepath) const;
+    bool loadProject(const std::string &filepath);
 
 private:
     // Helper function for the alpha blending math

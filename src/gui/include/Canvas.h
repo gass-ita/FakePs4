@@ -17,6 +17,7 @@ class Canvas : public QWidget, public LMObserver
 public:
     explicit Canvas(QWidget *parent = nullptr);
     void onRegionChanged(int x, int y, int width, int height) override;
+    void onLayerListChanged() override { emit coreLayerListChanged(); };
     void setTool(std::shared_ptr<Tool> newTool)
     {
         currentTool = newTool;
@@ -52,6 +53,8 @@ public:
     void setLayerVisibility(int index, bool visible);
     void setLayerName(int index, const QString &name);
 
+    LayerManager &getLayerManager() { return layerManager; }
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 
@@ -77,6 +80,10 @@ private:
 
     // Helper math to convert screen clicks to actual image pixels
     QPoint screenToImage(const QPoint &screenPos) const;
+
+signals:
+    // 2. Define a Qt signal to shout to the rest of the app
+    void coreLayerListChanged();
 };
 
 #endif // CANVAS_H

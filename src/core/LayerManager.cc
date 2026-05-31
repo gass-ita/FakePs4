@@ -42,7 +42,6 @@ void LayerManager::setActiveLayer(size_t index)
     }
 }
 
-// Modify your existing setPixel:
 void LayerManager::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
 
@@ -247,9 +246,6 @@ void LayerManager::setLayerName(size_t index, const std::string &name)
 // --- PREVIEW LOGIC ---
 void LayerManager::setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
-    // std::cout << "Setting preview pixel at (" << x << ", " << y << ") to color ("
-    //         << static_cast<int>(r) << ", " << static_cast<int>(g) << ", "
-    //       << static_cast<int>(b) << ", " << static_cast<int>(a) << ")\n";
     previewLayer->setPixel(x, y, r, g, b, a);
 
     // Expand the tracking bounding box

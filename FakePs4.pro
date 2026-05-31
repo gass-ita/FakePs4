@@ -28,7 +28,8 @@ SOURCES += \
     src/core/Layer.cc \
     src/core/LayerManager.cc \
     src/core/Shapes/*.cc \ 
-    src/core/Tools/*.cc \         
+    src/core/Tools/*.cc \  
+    src/core/FileSaving.cc \       
     src/gui/Canvas.cc \
     src/gui/MainWindow.cc
 
