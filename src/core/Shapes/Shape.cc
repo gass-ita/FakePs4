@@ -131,78 +131,55 @@ Ellipse::Ellipse(int xc, int yc, int rx, int ry, uint8_t r, uint8_t g, uint8_t b
 
 void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
 {
-    int radius = thickness / 2;
-    int radiusSquared = radius * radius;
+    float halfThick = thickness / 2.0f;
+    float rxOut = rx + halfThick;
+    float ryOut = ry + halfThick;
+    float rxIn = rx - halfThick;
+    float ryIn = ry - halfThick;
 
-    // A reusable helper to stamp thick pixels symmetrically
-    auto stampCircle = [&](int cx, int cy)
+    // Prevent inverted inner bounds on very thick small ellipses
+    if (rxIn < 0)
+        rxIn = 0;
+    if (ryIn < 0)
+        ryIn = 0;
+
+    float rxOutSq = rxOut * rxOut;
+    float ryOutSq = ryOut * ryOut;
+    float rxInSq = rxIn * rxIn;
+    float ryInSq = ryIn * ryIn;
+
+    // We scanline from the center outwards along the Y axis
+    for (int y = 0; y <= std::ceil(ryOut); ++y)
     {
-        if (thickness <= 1)
+        float ySq = y * y;
+
+        // 1. Find the outer X boundary for this specific Y row
+        float valOut = 1.0f - (ySq / ryOutSq);
+        int xOut = (valOut >= 0.0f) ? std::round(rxOut * std::sqrt(valOut)) : 0;
+
+        // 2. Find the inner X boundary (if this row is inside the hollow center)
+        int xIn = 0;
+        if (y <= ryIn && ryIn > 0.0f)
         {
-            (manager.*setter)(cx, cy, r, g, b, a);
+            float valIn = 1.0f - (ySq / ryInSq);
+            xIn = (valIn >= 0.0f) ? std::round(rxIn * std::sqrt(valIn)) : 0;
         }
-        else
+
+        // 3. Draw horizontal scanlines connecting the inner and outer bounds
+        // We do all 4 symmetrical quadrants at the same time
+        for (int x = xIn; x <= xOut; ++x)
         {
-            for (int cy_off = -radius; cy_off <= radius; cy_off++)
+            (manager.*setter)(xc + x, yc + y, r, g, b, a); // Bottom Right
+
+            if (x > 0)
+                (manager.*setter)(xc - x, yc + y, r, g, b, a); // Bottom Left
+
+            if (y > 0)
             {
-                for (int cx_off = -radius; cx_off <= radius; cx_off++)
-                {
-                    if (cx_off * cx_off + cy_off * cy_off <= radiusSquared)
-                    {
-                        (manager.*setter)(cx + cx_off, cy + cy_off, r, g, b, a);
-                    }
-                }
+                (manager.*setter)(xc + x, yc - y, r, g, b, a); // Top Right
+                if (x > 0)
+                    (manager.*setter)(xc - x, yc - y, r, g, b, a); // Top Left
             }
-        }
-    };
-
-    // Fast Midpoint Ellipse Algorithm (Integer Math)
-    long rxSq = rx * rx;
-    long rySq = ry * ry;
-    long x = 0, y = ry;
-    long px = 0, py = 2 * rxSq * y;
-
-    // Region 1 (Top and Bottom curves)
-    long p1 = rySq - (rxSq * ry) + (0.25 * rxSq);
-    while (px < py)
-    {
-        stampCircle(xc + x, yc + y);
-        stampCircle(xc - x, yc + y);
-        stampCircle(xc + x, yc - y);
-        stampCircle(xc - x, yc - y);
-        x++;
-        px += 2 * rySq;
-        if (p1 < 0)
-        {
-            p1 += rySq + px;
-        }
-        else
-        {
-            y--;
-            py -= 2 * rxSq;
-            p1 += rySq + px - py;
-        }
-    }
-
-    // Region 2 (Left and Right curves)
-    long p2 = rySq * (x + 0.5) * (x + 0.5) + rxSq * (y - 1) * (y - 1) - rxSq * rySq;
-    while (y >= 0)
-    {
-        stampCircle(xc + x, yc + y);
-        stampCircle(xc - x, yc + y);
-        stampCircle(xc + x, yc - y);
-        stampCircle(xc - x, yc - y);
-        y--;
-        py -= 2 * rxSq;
-        if (p2 > 0)
-        {
-            p2 += rxSq - py;
-        }
-        else
-        {
-            x++;
-            px += 2 * rySq;
-            p2 += rxSq - py + px;
         }
     }
 }

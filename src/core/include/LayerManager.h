@@ -7,6 +7,8 @@
 #include <memory>
 #include <cstdint>
 #include <string>
+#include <memory>
+#include <unordered_set>
 
 class LayerManager
 {
@@ -25,13 +27,13 @@ private:
     std::vector<LMObserver *> observers;
 
     bool isBatching = false;
-    std::vector<DirtyRect> batchDirtyRects;
     std::vector<uint8_t> projectionCache;
+    int tilesX, tilesY;
+    std::unordered_set<int> dirtyTiles;
 
     // preview logic
     std::shared_ptr<Layer> previewLayer;
-    int prevMinX = 0, prevMinY = 0;
-    int prevMaxX = -1, prevMaxY = -1;
+    std::unordered_set<int> previewDirtyTiles;
 
 public:
     LayerManager(int width, int height);
@@ -70,6 +72,7 @@ public:
 
     void setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
     void showPreview();
+    void addPreviewDirtyRect(int x, int y, int w, int h);
 
     // saving and loading
     bool saveProject(const std::string &filepath) const;

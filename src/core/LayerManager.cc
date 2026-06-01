@@ -8,6 +8,10 @@ LayerManager::LayerManager(int width, int height)
     previewLayer = std::make_shared<Layer>(width, height, "Preview Layer");
     projectionCache.resize(width * height * 4, 0);
     addLayer("Background");
+
+    tilesX = (width + TILE_SIZE - 1) / TILE_SIZE;
+    tilesY = (height + TILE_SIZE - 1) / TILE_SIZE;
+
     // Start with a solid white background
     layers.back()->fill(255, 255, 255, 255);
     markRegionDirty(0, 0, width, height);
@@ -69,13 +73,13 @@ void LayerManager::updateCache(int startX, int startY, int rWidth, int rHeight)
         {
             int globalIdx = (y * width + x) * 4;
 
-            // 1. Reset this cache pixel to completely transparent (0)
+            // 1. Reset cache pixel to completely transparent
             projectionCache[globalIdx] = 0;
             projectionCache[globalIdx + 1] = 0;
             projectionCache[globalIdx + 2] = 0;
             projectionCache[globalIdx + 3] = 0;
 
-            // 2. Re-composite all layers for this specific pixel
+            // 2. Re-composite all layers
             for (const auto &layer : layers)
             {
                 if (!layer->visible)
@@ -86,12 +90,16 @@ void LayerManager::updateCache(int startX, int startY, int rWidth, int rHeight)
                 uint8_t &bb = projectionCache[globalIdx + 2];
                 uint8_t &ba = projectionCache[globalIdx + 3];
 
-                uint8_t tr = layer->pixels[globalIdx];
-                uint8_t tg = layer->pixels[globalIdx + 1];
-                uint8_t tb = layer->pixels[globalIdx + 2];
-                uint8_t ta = layer->pixels[globalIdx + 3];
+                uint8_t tr, tg, tb, ta;
 
-                blendPixels(br, bg, bb, ba, tr, tg, tb, ta, layer->opacity);
+                // NEW: Safely ask the layer for the pixel data!
+                // If the tile is empty, this instantly returns 0 without allocating memory.
+                layer->getPixel(x, y, tr, tg, tb, ta);
+
+                if (ta > 0)
+                {
+                    blendPixels(br, bg, bb, ba, tr, tg, tb, ta, layer->opacity);
+                }
             }
         }
     }
@@ -125,6 +133,7 @@ std::vector<uint8_t> LayerManager::renderRegion(int startX, int startY, int rWid
     }
 
     // add the preview layer on top of the cache if it has any pixels in this region
+    // add the preview layer on top of the cache if it has any pixels in this region
     if (previewLayer)
     {
         for (int y = 0; y < h; ++y)
@@ -132,23 +141,21 @@ std::vector<uint8_t> LayerManager::renderRegion(int startX, int startY, int rWid
             for (int x = 0; x < w; ++x)
             {
                 int localIdx = (y * w + x) * 4;
-                int globalIdx = ((y0 + y) * width + (x0 + x)) * 4;
+                int globalX = x0 + x;
+                int globalY = y0 + y;
 
-                uint8_t ta = previewLayer->pixels[globalIdx + 3];
+                uint8_t tr, tg, tb, ta;
+                // NEW: Use getPixel for the preview layer too
+                previewLayer->getPixel(globalX, globalY, tr, tg, tb, ta);
 
                 // Only do math if the preview pixel exists
                 if (ta > 0)
                 {
-                    uint8_t tr = previewLayer->pixels[globalIdx];
-                    uint8_t tg = previewLayer->pixels[globalIdx + 1];
-                    uint8_t tb = previewLayer->pixels[globalIdx + 2];
-
                     uint8_t &br = regionBuffer[localIdx];
                     uint8_t &bg = regionBuffer[localIdx + 1];
                     uint8_t &bb = regionBuffer[localIdx + 2];
                     uint8_t &ba = regionBuffer[localIdx + 3];
 
-                    // Standard Alpha Compositing directly into the buffer
                     blendPixels(br, bg, bb, ba, tr, tg, tb, ta, 1.0f);
                 }
             }
@@ -193,22 +200,53 @@ void LayerManager::blendPixels(uint8_t &outR, uint8_t &outG, uint8_t &outB, uint
 void LayerManager::beginBatch()
 {
     isBatching = true;
-    batchDirtyRects.clear();
+    dirtyTiles.clear(); // Empty the Set for the new stroke
 }
 
 void LayerManager::endBatch()
 {
     isBatching = false;
-    for (const auto &rect : batchDirtyRects)
+
+    // Process every unique 64x64 tile that was touched
+    for (int tileIndex : dirtyTiles)
     {
-        markRegionDirty(rect.x, rect.y, rect.width, rect.height);
+
+        // Translate the ID back into an X/Y grid coordinate
+        int tx = tileIndex % tilesX;
+        int ty = tileIndex / tilesX;
+        // Tell the engine to re-composite ONLY this specific 64x64 square
+        markRegionDirty(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     }
-    batchDirtyRects.clear();
+
+    dirtyTiles.clear();
 }
 
 void LayerManager::addDirtyRect(int x, int y, int w, int h)
 {
-    batchDirtyRects.push_back({x, y, w, h});
+    if (!isBatching)
+    {
+        markRegionDirty(x, y, w, h);
+        return;
+    }
+
+    // 1. Find the bounds of the rectangle on the 64x64 grid
+    // We use std::max and std::min to ensure we never go off the canvas!
+    int txStart = std::max(0, x / TILE_SIZE);
+    int tyStart = std::max(0, y / TILE_SIZE);
+    int txEnd = std::min(tilesX - 1, (x + w) / TILE_SIZE);
+    int tyEnd = std::min(tilesY - 1, (y + h) / TILE_SIZE);
+
+    // 2. Loop through the grid and add every touched Tile ID to the Set
+    for (int ty = tyStart; ty <= tyEnd; ++ty)
+    {
+        for (int tx = txStart; tx <= txEnd; ++tx)
+        {
+            int tileIndex = ty * tilesX + tx;
+
+            // The std::unordered_set automatically ignores duplicates!
+            dirtyTiles.insert(tileIndex);
+        }
+    }
 }
 
 void LayerManager::setLayerVisibility(size_t index, bool visible)
@@ -249,62 +287,48 @@ void LayerManager::setLayerOpacity(size_t index, float opacity)
 void LayerManager::setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
     previewLayer->setPixel(x, y, r, g, b, a);
+}
 
-    // Expand the tracking bounding box
-    if (prevMaxX == -1)
+void LayerManager::addPreviewDirtyRect(int x, int y, int w, int h)
+{
+    int txStart = std::max(0, x / TILE_SIZE);
+    int tyStart = std::max(0, y / TILE_SIZE);
+    int txEnd = std::min(tilesX - 1, (x + w) / TILE_SIZE);
+    int tyEnd = std::min(tilesY - 1, (y + h) / TILE_SIZE);
+
+    for (int ty = tyStart; ty <= tyEnd; ++ty)
     {
-        prevMinX = x;
-        prevMaxX = x;
-        prevMinY = y;
-        prevMaxY = y;
-    }
-    else
-    {
-        prevMinX = std::min(prevMinX, x);
-        prevMinY = std::min(prevMinY, y);
-        prevMaxX = std::max(prevMaxX, x);
-        prevMaxY = std::max(prevMaxY, y);
+        for (int tx = txStart; tx <= txEnd; ++tx)
+        {
+            previewDirtyTiles.insert(ty * tilesX + tx);
+        }
     }
 }
 
 void LayerManager::clearPreview()
 {
-    if (prevMaxX == -1)
-        return; // Already empty!
-
-    int x0 = std::max(0, prevMinX);
-    int y0 = std::max(0, prevMinY);
-    int x1 = std::min(width - 1, prevMaxX);
-    int y1 = std::min(height - 1, prevMaxY);
-
-    // Wipe ONLY the exact box that was drawn
-    for (int y = y0; y <= y1; ++y)
+    // 1. Tell Qt to repaint the OLD tiles to visually erase the previous frame (true = Skip Cache!)
+    for (int tileIndex : previewDirtyTiles)
     {
-        for (int x = x0; x <= x1; ++x)
-        {
-            int idx = (y * width + x) * 4;
-            previewLayer->pixels[idx] = 0;
-            previewLayer->pixels[idx + 1] = 0;
-            previewLayer->pixels[idx + 2] = 0;
-            previewLayer->pixels[idx + 3] = 0;
-        }
+        int tx = tileIndex % tilesX;
+        int ty = tileIndex / tilesX;
+        markRegionDirty(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE, true);
     }
 
-    // Tell Qt to repaint this wiped box (true = Skip Cache!)
-    markRegionDirty(x0, y0, x1 - x0 + 1, y1 - y0 + 1, true);
+    // 2. Instantly wipe the memory (Drops the tile pointers)
+    previewLayer->clear();
 
-    // Reset the bounding box
-    prevMinX = width;
-    prevMinY = height;
-    prevMaxX = -1;
-    prevMaxY = -1;
+    // 3. Clear the mathematical set so it's ready for the next frame
+    previewDirtyTiles.clear();
 }
 
 void LayerManager::showPreview()
 {
-    // Tell Qt to repaint the newly drawn preview box (true = Skip Cache!)
-    if (prevMaxX != -1)
+    // Tell Qt to visually repaint the NEW tiles that the Tool just submitted
+    for (int tileIndex : previewDirtyTiles)
     {
-        markRegionDirty(prevMinX, prevMinY, prevMaxX - prevMinX + 1, prevMaxY - prevMinY + 1, true);
+        int tx = tileIndex % tilesX;
+        int ty = tileIndex / tilesX;
+        markRegionDirty(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE, true);
     }
 }

@@ -1,6 +1,7 @@
 #include "LayerManager.h"
 #include <fstream>
 #include <cstring>
+#include <vector>
 
 bool LayerManager::saveProject(const std::string &filepath) const
 {
@@ -29,8 +30,28 @@ bool LayerManager::saveProject(const std::string &filepath) const
         out.write(reinterpret_cast<const char *>(&layer->visible), sizeof(layer->visible));
         out.write(reinterpret_cast<const char *>(&layer->opacity), sizeof(layer->opacity));
 
-        // Massive raw pixel dump (Blazing fast!)
-        out.write(reinterpret_cast<const char *>(layer->pixels.data()), layer->pixels.size());
+        // --- NEW TILE-SAFE SAVING ---
+        // 1. Create a temporary flat buffer for the hard drive
+        std::vector<uint8_t> flatData(width * height * 4, 0);
+
+        // 2. Safely extract the pixels from the sparse tiles
+        for (int y = 0; y < height; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                uint8_t r, g, b, a;
+                layer->getPixel(x, y, r, g, b, a);
+
+                int idx = (y * width + x) * 4;
+                flatData[idx] = r;
+                flatData[idx + 1] = g;
+                flatData[idx + 2] = b;
+                flatData[idx + 3] = a;
+            }
+        }
+
+        // 3. Dump the flat buffer to the file (Maintains backward compatibility!)
+        out.write(reinterpret_cast<const char *>(flatData.data()), flatData.size());
     }
 
     return out.good();
@@ -59,6 +80,9 @@ bool LayerManager::loadProject(const std::string &filepath)
     layers.clear();                                // Destroy current layers
     projectionCache.assign(width * height * 4, 0); // Resize flat cache
 
+    // Calculate how many bytes each layer's flat array should be
+    size_t layerBytes = width * height * 4;
+
     // 3. Read Layers
     size_t numLayers;
     in.read(reinterpret_cast<char *>(&numLayers), sizeof(numLayers));
@@ -78,8 +102,30 @@ bool LayerManager::loadProject(const std::string &filepath)
         in.read(reinterpret_cast<char *>(&newLayer->visible), sizeof(newLayer->visible));
         in.read(reinterpret_cast<char *>(&newLayer->opacity), sizeof(newLayer->opacity));
 
-        // Read raw pixel dump directly into vector
-        in.read(reinterpret_cast<char *>(newLayer->pixels.data()), newLayer->pixels.size());
+        // --- NEW TILE-SAFE LOADING ---
+        // 1. Read the giant flat array from the hard drive into temporary memory
+        std::vector<uint8_t> flatData(layerBytes);
+        in.read(reinterpret_cast<char *>(flatData.data()), layerBytes);
+
+        // 2. Reconstruct the sparse tiles!
+        for (int y = 0; y < height; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                int idx = (y * width + x) * 4;
+
+                uint8_t a = flatData[idx + 3];
+
+                // THE MAGIC TRICK: Only call setPixel (which allocates RAM) if the pixel actually exists!
+                if (a > 0)
+                {
+                    uint8_t r = flatData[idx];
+                    uint8_t g = flatData[idx + 1];
+                    uint8_t b = flatData[idx + 2];
+                    newLayer->setPixel(x, y, r, g, b, a);
+                }
+            }
+        }
 
         layers.push_back(newLayer);
     }

@@ -4,6 +4,15 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <memory>
+
+constexpr int TILE_SIZE = 64;
+
+struct Tile
+{
+    std::vector<uint8_t> pixels;
+    Tile() : pixels(TILE_SIZE * TILE_SIZE * 4, 0) {}
+};
 
 class Layer
 {
@@ -13,14 +22,17 @@ public:
     int width;
     int height;
     std::string name;
-    bool visible;
-    float opacity; // 0.0f to 1.0f
+    bool visible = true;
+    float opacity = 1.0f; // 0.0f to 1.0f
 
-    // The raw pixel data (4 bytes per pixel: RGBA)
-    std::vector<uint8_t> pixels;
+    int tilesX;
+    int tilesY;
+
+    std::vector<std::unique_ptr<Tile>> tiles;
 
     void clear();
     void setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+    void getPixel(int x, int y, uint8_t &r, uint8_t &g, uint8_t &b, uint8_t &a) const;
     void fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 };
 
