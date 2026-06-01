@@ -1,17 +1,20 @@
 # ==========================================
-# Build Directories (Custom defined in .pro)
+# Build & Output Directories
 # ==========================================
 /bin/
 /build/
+/build-*/
 
 # ==========================================
-# qmake Generated Files
+# CMake Generated Files
 # ==========================================
+CMakeCache.txt
+CMakeFiles/
 Makefile
-Makefile.Debug
-Makefile.Release
-*.pro.user
-*.pro.user.*
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+.cmake/
 
 # ==========================================
 # IDEs and Editors
@@ -20,6 +23,10 @@ Makefile.Release
 .vscode/
 *.code-workspace
 
+# Qt Creator
+CMakeLists.txt.user
+CMakeLists.txt.user.*
+
 # ==========================================
 # OS Generated Files
 # ==========================================
@@ -27,13 +34,13 @@ Makefile.Release
 *~
 .directory
 
-# Windows / macOS (Good practice to include)
+# Windows / macOS
 .DS_Store
 Thumbs.db
 ehthumbs.db
 
 # ==========================================
-# Fallback Compiled C++ / Object Files
+# Compiled C++ / Object Files / Binaries
 # ==========================================
 *.o
 *.obj
@@ -42,3 +49,4 @@ ehthumbs.db
 *.a
 *.dll
 *.dylib
+*.exe
