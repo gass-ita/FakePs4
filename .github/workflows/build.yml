@@ -1,0 +1,62 @@
+name: Release FakePs4
+
+# Trigger the workflow only when a new release is created
+on:
+  release:
+    types: [created]
+
+# This block gives GitHub Actions permission to upload assets to your release
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            make: make
+            binary_name: FakePs4
+            output_name: FakePs4-linux
+          - os: windows-latest
+            make: nmake
+            binary_name: FakePs4.exe
+            output_name: FakePs4-windows.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup MSVC Compiler (Windows only)
+      if: matrix.os == 'windows-latest'
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.5.3'
+        target: 'desktop'
+
+    - name: Generate Makefile
+      run: qmake FakePs4.pro
+
+    - name: Compile Project
+      run: ${{ matrix.make }}
+
+    # Rename the files so they don't overwrite each other on the release page
+    - name: Prepare Binary Names
+      shell: bash
+      run: |
+        cd bin
+        mv ${{ matrix.binary_name }} ${{ matrix.output_name }}
+
+    # Automatically uploads the files directly into the created GitHub Release
+    - name: Upload Binaries to Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: bin/${{ matrix.output_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
