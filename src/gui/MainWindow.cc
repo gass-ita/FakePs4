@@ -14,6 +14,9 @@
 #include <QStandardPaths>
 #include <QMessageBox>
 #include <QShortcut>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QPushButton>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
@@ -168,15 +171,69 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         // Create the popup menu
         QMenu contextMenu(this);
         QAction *renameAction = contextMenu.addAction("Rename");
+        QAction *propertiesAction = contextMenu.addAction("Properties..."); // <--- NEW ACTION
 
         // Spawn the menu exactly where the mouse cursor is
         QAction *selectedAction = contextMenu.exec(layerList->mapToGlobal(pos));
 
-        // If they clicked "Rename"
+        // ACTION 1: RENAME
         if (selectedAction == renameAction) {
-            // Trigger Qt's inline text editor for this item.
-            // When they hit Enter, your existing itemChanged signal will catch it!
             layerList->editItem(item);
+        } 
+        // ACTION 2: PROPERTIES (OPACITY SLIDER)
+        // ACTION 2: PROPERTIES (OPACITY SLIDER)
+        else if (selectedAction == propertiesAction) {
+            
+            int row = layerList->row(item);
+
+            QDialog dialog(this);
+            dialog.setWindowTitle(item->text() + " Properties");
+            dialog.setMinimumWidth(250);
+            
+            QVBoxLayout layout(&dialog);
+
+            float currentOpacity = canvas->getLayerManager().getLayers()[row]->opacity;
+            int currentPercentage = static_cast<int>(currentOpacity * 100);
+
+            QLabel label(QString("Opacity: %1%").arg(currentPercentage));
+            QSlider slider(Qt::Horizontal);
+            slider.setRange(0, 100);
+            slider.setValue(currentPercentage);
+
+            // 1. Create the native Button Box
+            QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Apply);
+
+            layout.addWidget(&label);
+            layout.addWidget(&slider);
+            layout.addWidget(&buttonBox); // Add buttons to the bottom
+
+            // ==========================================
+            // NEW DISCONNECTED LOGIC
+            // ==========================================
+
+            // 2. Dragging the slider ONLY updates the text label now. 
+            // It does NOT touch the engine.
+            connect(&slider, &QSlider::valueChanged, this, [&label](int value){
+                label.setText(QString("Opacity: %1%").arg(value));
+            });
+
+            // 3. Clicking "Apply" updates the engine, but keeps the window open
+            connect(buttonBox.button(QDialogButtonBox::Apply), &QPushButton::clicked, this, [this, &slider, row]() {
+                canvas->setLayerOpacity(row, slider.value());
+            });
+
+            // 4. Clicking "OK" updates the engine AND closes the window
+            connect(&buttonBox, &QDialogButtonBox::accepted, this, [this, &dialog, &slider, row]() {
+                canvas->setLayerOpacity(row, slider.value());
+                dialog.accept(); // Closes the dialog successfully
+            });
+
+            // 5. Clicking "Cancel" simply closes the window without updating the engine
+            connect(&buttonBox, &QDialogButtonBox::rejected, this, [&dialog]() {
+                dialog.reject(); // Closes the dialog with no action
+            });
+
+            dialog.exec();
         } });
 
         // Saving and Loading

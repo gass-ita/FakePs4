@@ -243,6 +243,15 @@ void LayerManager::setLayerName(size_t index, const std::string &name)
     layers[index]->name = name;
 }
 
+void LayerManager::setLayerOpacity(size_t index, float opacity)
+{
+    if (index >= layers.size())
+        return;
+    layers[index]->opacity = opacity;
+    // Changing opacity affects the entire layer, so we must recalculate the whole cache
+    markRegionDirty(0, 0, width, height);
+}
+
 // --- PREVIEW LOGIC ---
 void LayerManager::setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {

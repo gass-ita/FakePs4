@@ -46,7 +46,11 @@ public:
             currentTool->setColor(r, g, b, a);
         }
     }
-
+    void setLayerOpacity(int index, int opacityPercentage)
+    {
+        float opacity = std::clamp(opacityPercentage / 100.0f, 0.0f, 1.0f);
+        layerManager.setLayerOpacity(index, opacity);
+    }
     void addNewLayer(const QString &name);
     void setActiveLayer(int index);
 

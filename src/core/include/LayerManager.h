@@ -56,6 +56,7 @@ public:
 
     void setLayerVisibility(size_t index, bool visible);
     void setLayerName(size_t index, const std::string &name);
+    void setLayerOpacity(size_t index, float opacity); // opacity as a float between 0.0 and 1.0
 
     // preview logic
     void clearPreview();

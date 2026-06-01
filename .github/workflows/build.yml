@@ -1,0 +1,77 @@
+name: Cross-Platform Build
+
+# This tells GitHub to run the script every time you push to the 'main' branch
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  # ==========================================
+  # LINUX BUILD
+  # ==========================================
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.3' # A highly stable Qt6 release
+          host: 'linux'
+          target: 'desktop'
+
+      - name: Install Linux Dependencies (OpenGL)
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev
+
+      - name: Compile Engine
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          make -j$(nproc)
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FakePs4-Linux
+          path: bin/FakePs4
+
+  # ==========================================
+  # WINDOWS BUILD
+  # ==========================================
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Qt6 (MinGW)
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+
+      - name: Compile Engine
+        run: |
+          mkdir build
+          cd build
+          # -G tells CMake to use MinGW instead of Microsoft Visual Studio
+          cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
+          mingw32-make -j4
+
+      - name: Package Windows DLLs (windeployqt)
+        run: |
+          cd bin
+          windeployqt --compiler-runtime FakePs4.exe
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FakePs4-Windows
+          path: bin/ # We upload the whole bin folder because it now contains the .exe AND the .dlls!
