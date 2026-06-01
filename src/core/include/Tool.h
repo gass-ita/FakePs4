@@ -1,21 +1,17 @@
 #ifndef TOOL_H
 #define TOOL_H
-
 #include "LayerManager.h"
-#include "Shape.h"
+#include "Shape.h" // Assuming this is where Line, Rectangle, Ellipse are
 
-// The Strategy Interface
 class Tool
 {
-protected:
-    int size = 5;
-    uint8_t r = 0, g = 0, b = 0, a = 255; // active color (default black)
-
 public:
+    int size = 5;
+    uint8_t r = 0, g = 0, b = 0, a = 255;
+
     virtual ~Tool() = default;
 
     virtual void setSize(int newSize) { size = newSize; }
-    // int getSize() const { return size; }
     virtual void setColor(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = 255)
     {
         r = red;
@@ -24,63 +20,96 @@ public:
         a = alpha;
     }
 
-    // Every tool must know how to handle these three mouse states
-    virtual void onPress(int x, int y, LayerManager &manager) = 0;
-    virtual void onMove(int x, int y, LayerManager &manager) = 0;
-    virtual void onRelease(int x, int y, LayerManager &manager) = 0;
-    virtual void onHover(int /*x*/, int /*y*/, LayerManager & /*manager*/) {}
+    virtual void onPress(int x, int y, LayerManager &manager) {}
+    virtual void onMove(int x, int y, LayerManager &manager) {}
+    virtual void onRelease(int x, int y, LayerManager &manager) {}
+    virtual void onHover(int x, int y, LayerManager &manager) {}
 };
 
-class BrushTool : public Tool
+// ==========================================
+// 1. THE STROKE ARCHETYPE
+// ==========================================
+class StrokeTool : public Tool
 {
+protected:
+    bool isDrawing = false;
+    int lastX = 0;
+    int lastY = 0;
+
+    // Pure virtual functions that child classes MUST implement
+    virtual void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) = 0;
+    virtual void drawHoverCursor(int x, int y, LayerManager &manager) = 0;
+
 public:
     void onPress(int x, int y, LayerManager &manager) override;
     void onMove(int x, int y, LayerManager &manager) override;
     void onRelease(int x, int y, LayerManager &manager) override;
     void onHover(int x, int y, LayerManager &manager) override;
-
-private:
-    int lastX = 0, lastY = 0;
-    bool isDrawing = false;
 };
 
-class RectangleTool : public Tool
+// ==========================================
+// 2. THE SHAPE ARCHETYPE
+// ==========================================
+class ShapeTool : public Tool
 {
+protected:
+    bool isDrawing = false;
+    int startX = 0;
+    int startY = 0;
+
+    // Pure virtual functions that child classes MUST implement
+    virtual void drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;
+    virtual void drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;
+
 public:
     void onPress(int x, int y, LayerManager &manager) override;
     void onMove(int x, int y, LayerManager &manager) override;
     void onRelease(int x, int y, LayerManager &manager) override;
-
-private:
-    int startX = 0, startY = 0;
-    bool isDrawing = false;
 };
 
-// Tool 4: The Ellipse Stamp
-class EllipseTool : public Tool
+// ==========================================
+// 3. THE CONCRETE TOOLS
+// ==========================================
+class BrushTool : public StrokeTool
+{
+protected:
+    void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) override;
+    void drawHoverCursor(int x, int y, LayerManager &manager) override;
+};
+
+class EraserTool : public StrokeTool
+{
+protected:
+    void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) override;
+    void drawHoverCursor(int x, int y, LayerManager &manager) override;
+};
+
+class RectangleTool : public ShapeTool
+{
+protected:
+    void drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager) override;
+    void drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager) override;
+};
+
+class EllipseTool : public ShapeTool
+{
+protected:
+    void drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager) override;
+    void drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager) override;
+};
+
+class FillTool : public Tool
 {
 public:
     void onPress(int x, int y, LayerManager &manager) override;
-    void onMove(int x, int y, LayerManager &manager) override;
-    void onRelease(int x, int y, LayerManager &manager) override;
 
-private:
-    int startX = 0, startY = 0;
-    bool isDrawing = false;
-};
-
-// Tool 3: The Eraser
-class EraserTool : public Tool
-{
-public:
-    void onPress(int x, int y, LayerManager &manager) override;
-    void onMove(int x, int y, LayerManager &manager) override;
-    void onRelease(int x, int y, LayerManager &manager) override;
-    void onHover(int x, int y, LayerManager &manager) override;
-
-private:
-    int lastX = 0, lastY = 0;
-    bool isErasing = false;
+    // We leave Move, Release, and Hover completely blank for the Fill tool
+    void onMove(int x, int y, LayerManager &manager) override {}
+    void onRelease(int x, int y, LayerManager &manager) override {}
+    void onHover(int x, int y, LayerManager &manager) override
+    {
+        manager.clearPreview(); // Just wipe any previous cursors
+    }
 };
 
 #endif // TOOL_H

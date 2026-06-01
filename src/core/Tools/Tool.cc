@@ -3,9 +3,9 @@
 #include <cmath>
 
 // ==========================================
-// BRUSH TOOL
+// STROKE TOOL (Base Class Boilerplate)
 // ==========================================
-void BrushTool::onPress(int x, int y, LayerManager &manager)
+void StrokeTool::onPress(int x, int y, LayerManager &manager)
 {
     manager.clearPreview();
     isDrawing = true;
@@ -13,131 +13,73 @@ void BrushTool::onPress(int x, int y, LayerManager &manager)
     lastY = y;
 
     manager.beginBatch();
-    Line(x, y, x, y, r, g, b, a, size).draw(manager);
-
-    // add the dirty rect to the batch list
-    int minX = x - size;
-    int minY = y - size;
-    int maxX = x + size;
-    int maxY = y + size;
-    manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
-
+    drawLineSegment(x, y, x, y, manager);
+    manager.addDirtyRect(x - size, y - size, size * 2 + 1, size * 2 + 1);
     manager.endBatch();
 }
 
-void BrushTool::onHover(int x, int y, LayerManager &manager)
-{
-    if (isDrawing)
-        return; // Don't show the hover cursor if we're actively drawing
-
-    manager.clearPreview();
-
-    CircleOutline(x, y, size, 50, 50, 50, 255).draw(manager, &LayerManager::setPreviewPixel);
-
-    // --- SUBMIT PREVIEW RECTANGLE ---
-    int pad = size + 2; // +2 guarantees anti-aliased edges fit inside the box
-    manager.addPreviewDirtyRect(x - pad, y - pad, pad * 2, pad * 2);
-    // --------------------------------
-
-    manager.showPreview();
-}
-void BrushTool::onMove(int x, int y, LayerManager &manager)
+void StrokeTool::onMove(int x, int y, LayerManager &manager)
 {
     if (!isDrawing)
         return;
 
     manager.beginBatch();
-    Line(lastX, lastY, x, y, r, g, b, a, size).draw(manager);
+    drawLineSegment(lastX, lastY, x, y, manager);
 
-    // add the dirty rect to the batch list
     int minX = std::min(lastX, x) - size;
     int minY = std::min(lastY, y) - size;
     int maxX = std::max(lastX, x) + size;
     int maxY = std::max(lastY, y) + size;
     manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
+
     manager.endBatch();
 
     lastX = x;
     lastY = y;
 }
 
-void BrushTool::onRelease(int x, int y, LayerManager &manager)
+void StrokeTool::onRelease(int x, int y, LayerManager &manager)
 {
     isDrawing = false;
 }
 
-// ==========================================
-// RECTANGLE TOOL (Click and Drag)
-// ==========================================
-void RectangleTool::onPress(int x, int y, LayerManager &manager)
+void StrokeTool::onHover(int x, int y, LayerManager &manager)
 {
-    manager.clearPreview(); // Failsafe: clear any leftover hover cursors
-    startX = x;
-    startY = y;
-    isDrawing = true;
-}
-
-void RectangleTool::onMove(int x, int y, LayerManager &manager)
-{
-    if (!isDrawing)
-        return;
-
-    // 1. Wipes the old frame
-    manager.clearPreview();
-
-    int rectX = std::min(startX, x);
-    int rectY = std::min(startY, y);
-    int width = std::abs(x - startX);
-    int height = std::abs(y - startY);
-
-    if (width > 0 && height > 0)
-    {
-        // 2. Draw to scratchpad
-        Rectangle(rectX, rectY, width, height, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
-
-        // 3. Submit the 4 Hollow Walls to the Preview Tracker!
-        int pad = size;
-        manager.addPreviewDirtyRect(rectX - pad, rectY - pad, width + (pad * 2), size + (pad * 2));
-        manager.addPreviewDirtyRect(rectX - pad, (rectY + height) - size - pad, width + (pad * 2), size + (pad * 2));
-        manager.addPreviewDirtyRect(rectX - pad, rectY - pad, size + (pad * 2), height + (pad * 2));
-        manager.addPreviewDirtyRect((rectX + width) - size - pad, rectY - pad, size + (pad * 2), height + (pad * 2));
-
-        // 4. Force Qt to repaint those specific walls
-        manager.showPreview();
-    }
-}
-
-void RectangleTool::onRelease(int x, int y, LayerManager &manager)
-{
-    if (!isDrawing)
+    if (isDrawing)
         return;
 
     manager.clearPreview();
+    drawHoverCursor(x, y, manager);
 
-    int rectX = std::min(startX, x);
-    int rectY = std::min(startY, y);
-    int width = std::abs(x - startX);
-    int height = std::abs(y - startY);
+    int pad = size + 2;
+    manager.addPreviewDirtyRect(x - pad, y - pad, pad * 2, pad * 2);
+    manager.showPreview();
+}
 
-    if (width > 0 && height > 0)
-    {
-        manager.beginBatch();
-        // Default routing: This burns into the REAL active layer
-        Rectangle(rectX, rectY, width, height, r, g, b, a, size).draw(manager);
-        manager.addDirtyRect(rectX - size, rectY - size, width + (size * 2), size + (size * 2));
-        manager.addDirtyRect(rectX - size, (rectY + height) - size - size, width + (size * 2), size + (size * 2));
-        manager.addDirtyRect(rectX - size, rectY - size, size + (size * 2), height + (size * 2));
-        manager.addDirtyRect((rectX + width) - size - size, rectY - size, size + (size * 2), height + (size * 2));
-        manager.endBatch();
-    }
+// --- CONCRETE STROKE IMPLEMENTATIONS ---
 
-    isDrawing = false;
+void BrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
+{
+    Line(x0, y0, x1, y1, r, g, b, a, size).draw(manager);
+}
+void BrushTool::drawHoverCursor(int x, int y, LayerManager &manager)
+{
+    CircleOutline(x, y, size, 50, 50, 50, 255).draw(manager, &LayerManager::setPreviewPixel);
+}
+
+void EraserTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
+{
+    Line(x0, y0, x1, y1, 0, 0, 0, 0, size).draw(manager); // Transparent!
+}
+void EraserTool::drawHoverCursor(int x, int y, LayerManager &manager)
+{
+    CircleOutline(x, y, size, 255, 0, 0, 255).draw(manager, &LayerManager::setPreviewPixel); // Red!
 }
 
 // ==========================================
-// ELLIPSE TOOL (Click and Drag)
+// SHAPE TOOL (Base Class Boilerplate)
 // ==========================================
-void EllipseTool::onPress(int x, int y, LayerManager &manager)
+void ShapeTool::onPress(int x, int y, LayerManager &manager)
 {
     manager.clearPreview();
     startX = x;
@@ -145,77 +87,86 @@ void EllipseTool::onPress(int x, int y, LayerManager &manager)
     isDrawing = true;
 }
 
-void EllipseTool::onMove(int x, int y, LayerManager &manager)
+void ShapeTool::onMove(int x, int y, LayerManager &manager)
 {
     if (!isDrawing)
         return;
+
     manager.clearPreview();
+    drawShapePreview(startX, startY, x, y, manager);
+    manager.showPreview();
+}
 
-    int rx = std::abs(x - startX) / 2;
-    int ry = std::abs(y - startY) / 2;
-    int cx = (startX + x) / 2;
-    int cy = (startY + y) / 2;
+void ShapeTool::onRelease(int x, int y, LayerManager &manager)
+{
+    if (!isDrawing)
+        return;
 
-    if (rx > 0 && ry > 0)
+    manager.clearPreview();
+    manager.beginBatch();
+    drawShapeFinal(startX, startY, x, y, manager);
+    manager.endBatch();
+
+    isDrawing = false;
+}
+
+// --- CONCRETE SHAPE IMPLEMENTATIONS ---
+
+// 1. RECTANGLE
+void RectangleTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager)
+{
+    int rx = std::min(sx, cx);
+    int ry = std::min(sy, cy);
+    int w = std::abs(cx - sx);
+    int h = std::abs(cy - sy);
+
+    if (w > 0 && h > 0)
     {
-        Ellipse(cx, cy, rx, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
+        Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
+        int p = size;
+        manager.addPreviewDirtyRect(rx - p, ry - p, w + (p * 2), size + (p * 2));
+        manager.addPreviewDirtyRect(rx - p, (ry + h) - size - p, w + (p * 2), size + (p * 2));
+        manager.addPreviewDirtyRect(rx - p, ry - p, size + (p * 2), h + (p * 2));
+        manager.addPreviewDirtyRect((rx + w) - size - p, ry - p, size + (p * 2), h + (p * 2));
+    }
+}
+void RectangleTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager)
+{
+    int rx = std::min(sx, cx);
+    int ry = std::min(sy, cy);
+    int w = std::abs(cx - sx);
+    int h = std::abs(cy - sy);
 
-        // --- THE O(PERIMETER) HOLLOW OPTIMIZATION ---
-        int pad = size + 2;
-        int rectW = (rx * 2) + (pad * 2);
-        int rectH = (ry * 2) + (pad * 2);
-
-        // 1. If it's a small ellipse, a solid box is actually faster
-        if (rectW < 512 && rectH < 512)
-        {
-            int rectX = (cx - rx) - pad;
-            int rectY = (cy - ry) - pad;
-            manager.addPreviewDirtyRect(rectX, rectY, rectW, rectH);
-        }
-        // 2. If it's massive, trace the hollow ring using Sine/Cosine!
-        else
-        {
-            int steps = std::max(rx, ry) * 2; // Ensure we trace enough points so no gaps exist
-            for (int i = 0; i < steps; ++i)
-            {
-                float angle = (i * 6.2831853f) / steps; // 6.283 is 2 * Pi
-                int px = cx + (rx * std::cos(angle));
-                int py = cy + (ry * std::sin(angle));
-                manager.addPreviewDirtyRect(px - pad, py - pad, pad * 2, pad * 2);
-            }
-        }
-        // --------------------------------------------
-
-        manager.showPreview();
+    if (w > 0 && h > 0)
+    {
+        Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager);
+        int p = size;
+        manager.addDirtyRect(rx - p, ry - p, w + (p * 2), size + (p * 2));
+        manager.addDirtyRect(rx - p, (ry + h) - size - p, w + (p * 2), size + (p * 2));
+        manager.addDirtyRect(rx - p, ry - p, size + (p * 2), h + (p * 2));
+        manager.addDirtyRect((rx + w) - size - p, ry - p, size + (p * 2), h + (p * 2));
     }
 }
 
-void EllipseTool::onRelease(int x, int y, LayerManager &manager)
+// 2. ELLIPSE
+void EllipseTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager)
 {
-    if (!isDrawing)
-        return;
-    manager.clearPreview();
-
-    int rx = std::abs(x - startX) / 2;
-    int ry = std::abs(y - startY) / 2;
-    int cx = (startX + x) / 2;
-    int cy = (startY + y) / 2;
+    int rx = std::abs(cx - sx) / 2;
+    int ry = std::abs(cy - sy) / 2;
+    int cenX = (sx + cx) / 2;
+    int cenY = (sy + cy) / 2;
 
     if (rx > 0 && ry > 0)
     {
-        manager.beginBatch();
-        Ellipse(cx, cy, rx, ry, r, g, b, a, size).draw(manager);
+        Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
 
-        // --- SAME OPTIMIZATION FOR PERMANENT BURN-IN ---
         int pad = size + 2;
         int rectW = (rx * 2) + (pad * 2);
         int rectH = (ry * 2) + (pad * 2);
 
         if (rectW < 512 && rectH < 512)
         {
-            int rectX = (cx - rx) - pad;
-            int rectY = (cy - ry) - pad;
-            manager.addDirtyRect(rectX, rectY, rectW, rectH);
+            manager.addPreviewDirtyRect((cenX - rx) - pad, (cenY - ry) - pad, rectW, rectH);
         }
         else
         {
@@ -223,76 +174,156 @@ void EllipseTool::onRelease(int x, int y, LayerManager &manager)
             for (int i = 0; i < steps; ++i)
             {
                 float angle = (i * 6.2831853f) / steps;
-                int px = cx + (rx * std::cos(angle));
-                int py = cy + (ry * std::sin(angle));
+                int px = cenX + (rx * std::cos(angle));
+                int py = cenY + (ry * std::sin(angle));
+                manager.addPreviewDirtyRect(px - pad, py - pad, pad * 2, pad * 2);
+            }
+        }
+    }
+}
+
+void EllipseTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager)
+{
+    // Exactly the same logic, but routing to the permanent memory and addDirtyRect!
+    int rx = std::abs(cx - sx) / 2;
+    int ry = std::abs(cy - sy) / 2;
+    int cenX = (sx + cx) / 2;
+    int cenY = (sy + cy) / 2;
+
+    if (rx > 0 && ry > 0)
+    {
+        Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager);
+
+        int pad = size + 2;
+        int rectW = (rx * 2) + (pad * 2);
+        int rectH = (ry * 2) + (pad * 2);
+
+        if (rectW < 512 && rectH < 512)
+        {
+            manager.addDirtyRect((cenX - rx) - pad, (cenY - ry) - pad, rectW, rectH);
+        }
+        else
+        {
+            int steps = std::max(rx, ry) * 2;
+            for (int i = 0; i < steps; ++i)
+            {
+                float angle = (i * 6.2831853f) / steps;
+                int px = cenX + (rx * std::cos(angle));
+                int py = cenY + (ry * std::sin(angle));
                 manager.addDirtyRect(px - pad, py - pad, pad * 2, pad * 2);
             }
         }
-
-        manager.endBatch();
     }
-    isDrawing = false;
 }
 
 // ==========================================
-// ERASER TOOL
+// FILL TOOL (Scanline Span Algorithm)
 // ==========================================
-void EraserTool::onPress(int x, int y, LayerManager &manager)
+void FillTool::onPress(int x, int y, LayerManager &manager)
 {
-    manager.clearPreview(); // Clear hover outline when clicking down
-    isErasing = true;
-    lastX = x;
-    lastY = y;
-
-    manager.beginBatch();
-    // Draw a completely transparent pixel (Alpha = 0)
-    Line(x, y, x, y, 0, 0, 0, 0, size).draw(manager);
-    int minX = std::min(lastX, x) - size;
-    int minY = std::min(lastY, y) - size;
-    int maxX = std::max(lastX, x) + size;
-    int maxY = std::max(lastY, y) + size;
-    manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
-    manager.endBatch();
-}
-
-void EraserTool::onHover(int x, int y, LayerManager &manager)
-{
-    if (isErasing)
-        return; // Don't show the hover cursor if we're actively erasing
-
     manager.clearPreview();
 
-    // Draw a RED circle outline to indicate it's an eraser
-    CircleOutline(x, y, size, 255, 0, 0, 255).draw(manager, &LayerManager::setPreviewPixel);
+    // 1. Boundary check
+    if (x < 0 || x >= manager.getWidth() || y < 0 || y >= manager.getHeight())
+        return;
 
-    // --- SUBMIT PREVIEW RECTANGLE ---
-    int pad = size + 2;
-    manager.addPreviewDirtyRect(x - pad, y - pad, pad * 2, pad * 2);
-    // --------------------------------
+    // 2. Sample the "Target Color" we want to overwrite
+    uint8_t tr, tg, tb, ta;
+    manager.getPixel(x, y, tr, tg, tb, ta);
 
-    manager.showPreview();
-}
-
-void EraserTool::onMove(int x, int y, LayerManager &manager)
-{
-    if (!isErasing)
+    // Failsafe: If the pixel is already the exact color we are holding, do nothing!
+    if (tr == r && tg == g && tb == b && ta == a)
         return;
 
     manager.beginBatch();
-    // Erase a stroke from the last position to the current one
-    Line(lastX, lastY, x, y, 0, 0, 0, 0, size).draw(manager);
-    int minX = std::min(lastX, x) - size;
-    int minY = std::min(lastY, y) - size;
-    int maxX = std::max(lastX, x) + size;
-    int maxY = std::max(lastY, y) + size;
+
+    // The stack holds the X, Y coordinates of rows we still need to process
+    std::vector<std::pair<int, int>> stack;
+    stack.push_back({x, y});
+
+    // Track the dirty bounding box so we can dispatch the exact tiles later
+    int minX = x, minY = y, maxX = x, maxY = y;
+
+    while (!stack.empty())
+    {
+        auto [cx, cy] = stack.back();
+        stack.pop_back();
+
+        uint8_t cr, cg, cb, ca;
+        int lx = cx;
+
+        // 3. Scan Left to find the wall
+        while (lx >= 0)
+        {
+            manager.getPixel(lx, cy, cr, cg, cb, ca);
+            if (cr != tr || cg != tg || cb != tb || ca != ta)
+                break;
+            lx--;
+        }
+        lx++; // Step back to the valid pixel
+
+        // 4. Scan Right to find the other wall
+        int rx = cx;
+        while (rx < manager.getWidth())
+        {
+            manager.getPixel(rx, cy, cr, cg, cb, ca);
+            if (cr != tr || cg != tg || cb != tb || ca != ta)
+                break;
+            rx++;
+        }
+        rx--;
+
+        // Update our dirty bounding box
+        minX = std::min(minX, lx);
+        maxX = std::max(maxX, rx);
+        minY = std::min(minY, cy);
+        maxY = std::max(maxY, cy);
+
+        bool spanAbove = false;
+        bool spanBelow = false;
+
+        // 5. Burn the horizontal line into memory and check above/below for more space
+        for (int i = lx; i <= rx; ++i)
+        {
+            manager.setPixel(i, cy, r, g, b, a);
+
+            // Check the row ABOVE
+            if (cy > 0)
+            {
+                manager.getPixel(i, cy - 1, cr, cg, cb, ca);
+                bool match = (cr == tr && cg == tg && cb == tb && ca == ta);
+
+                if (match && !spanAbove)
+                {
+                    stack.push_back({i, cy - 1});
+                    spanAbove = true;
+                }
+                else if (!match)
+                {
+                    spanAbove = false;
+                }
+            }
+
+            // Check the row BELOW
+            if (cy < manager.getHeight() - 1)
+            {
+                manager.getPixel(i, cy + 1, cr, cg, cb, ca);
+                bool match = (cr == tr && cg == tg && cb == tb && ca == ta);
+
+                if (match && !spanBelow)
+                {
+                    stack.push_back({i, cy + 1});
+                    spanBelow = true;
+                }
+                else if (!match)
+                {
+                    spanBelow = false;
+                }
+            }
+        }
+    }
+
+    // 6. Report the final, optimized bounding box to the Tile Cache and Undo System!
     manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
     manager.endBatch();
-
-    lastX = x;
-    lastY = y;
-}
-
-void EraserTool::onRelease(int x, int y, LayerManager &manager)
-{
-    isErasing = false;
 }

@@ -32,6 +32,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         QAction *eraserAction = toolbar->addAction("Eraser");
         QAction *rectAction = toolbar->addAction("Rectangle");
         QAction *ellipseAction = toolbar->addAction("Ellipse");
+        QAction *fillAction = toolbar->addAction("Fill");
 
         toolbar->addSeparator(); // Add a nice visual line
 
@@ -98,6 +99,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                 { canvas->setToolSize(value); });
         connect(ellipseAction, &QAction::triggered, this, [this]()
                 { canvas->setTool(std::make_shared<EllipseTool>()); });
+        connect(fillAction, &QAction::triggered, this, [this]()
+                { canvas->setTool(std::make_shared<FillTool>()); });
         // Set the default tool to Brush
         canvas->setTool(std::make_shared<BrushTool>());
 

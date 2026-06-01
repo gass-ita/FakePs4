@@ -12,7 +12,6 @@ LayerManager::LayerManager(int width, int height)
     tilesX = (width + TILE_SIZE - 1) / TILE_SIZE;
     tilesY = (height + TILE_SIZE - 1) / TILE_SIZE;
 
-    // Start with a solid white background
     layers.back()->fill(255, 255, 255, 255);
     markRegionDirty(0, 0, width, height);
 }
@@ -58,6 +57,16 @@ void LayerManager::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8
         // Normal immediate update
         markRegionDirty(x, y, 1, 1);
     }
+}
+
+void LayerManager::getPixel(int x, int y, uint8_t &r, uint8_t &g, uint8_t &b, uint8_t &a) const
+{
+    if (activeLayerIndex >= layers.size())
+    {
+        r = g = b = a = 0;
+        return;
+    }
+    layers[activeLayerIndex]->getPixel(x, y, r, g, b, a);
 }
 
 void LayerManager::updateCache(int startX, int startY, int rWidth, int rHeight)
@@ -259,9 +268,7 @@ void LayerManager::setLayerVisibility(size_t index, bool visible)
     {
         layers[index]->visible = visible;
 
-        // CRITICAL: If a layer disappears or appears, the entire cache is invalid.
-        // We must tell the observer to redraw the entire width and height of the canvas.
-        markRegionDirty(0, 0, width, height);
+        markRegionDirty(0, 0, getWidth(), getHeight());
     }
 }
 
@@ -269,8 +276,6 @@ void LayerManager::setLayerName(size_t index, const std::string &name)
 {
     if (index >= layers.size())
         return;
-    // Assuming your Layer class has a public 'name' string property
-    // If not, you may need to add it to Layer.h!
     layers[index]->name = name;
 }
 
@@ -279,8 +284,7 @@ void LayerManager::setLayerOpacity(size_t index, float opacity)
     if (index >= layers.size())
         return;
     layers[index]->opacity = opacity;
-    // Changing opacity affects the entire layer, so we must recalculate the whole cache
-    markRegionDirty(0, 0, width, height);
+    markRegionDirty(0, 0, getWidth(), getHeight());
 }
 
 // --- PREVIEW LOGIC ---
@@ -307,7 +311,6 @@ void LayerManager::addPreviewDirtyRect(int x, int y, int w, int h)
 
 void LayerManager::clearPreview()
 {
-    // 1. Tell Qt to repaint the OLD tiles to visually erase the previous frame (true = Skip Cache!)
     for (int tileIndex : previewDirtyTiles)
     {
         int tx = tileIndex % tilesX;
@@ -315,16 +318,12 @@ void LayerManager::clearPreview()
         markRegionDirty(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE, true);
     }
 
-    // 2. Instantly wipe the memory (Drops the tile pointers)
     previewLayer->clear();
-
-    // 3. Clear the mathematical set so it's ready for the next frame
     previewDirtyTiles.clear();
 }
 
 void LayerManager::showPreview()
 {
-    // Tell Qt to visually repaint the NEW tiles that the Tool just submitted
     for (int tileIndex : previewDirtyTiles)
     {
         int tx = tileIndex % tilesX;
