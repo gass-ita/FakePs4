@@ -49,15 +49,7 @@ void LayerManager::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8
         return;
     layers[activeLayerIndex]->setPixel(x, y, r, g, b, a);
 
-    if (isBatching)
-    {
-        // Expand the dirty bounding box silently
-        batchMinX = std::min(batchMinX, x);
-        batchMinY = std::min(batchMinY, y);
-        batchMaxX = std::max(batchMaxX, x);
-        batchMaxY = std::max(batchMaxY, y);
-    }
-    else
+    if (!isBatching)
     {
         // Normal immediate update
         markRegionDirty(x, y, 1, 1);
@@ -201,21 +193,22 @@ void LayerManager::blendPixels(uint8_t &outR, uint8_t &outG, uint8_t &outB, uint
 void LayerManager::beginBatch()
 {
     isBatching = true;
-    // Reset bounding box to extreme opposites
-    batchMinX = width;
-    batchMinY = height;
-    batchMaxX = 0;
-    batchMaxY = 0;
+    batchDirtyRects.clear();
 }
 
 void LayerManager::endBatch()
 {
     isBatching = false;
-    // Only update if something was actually drawn
-    if (batchMinX <= batchMaxX && batchMinY <= batchMaxY)
+    for (const auto &rect : batchDirtyRects)
     {
-        markRegionDirty(batchMinX, batchMinY, batchMaxX - batchMinX + 1, batchMaxY - batchMinY + 1);
+        markRegionDirty(rect.x, rect.y, rect.width, rect.height);
     }
+    batchDirtyRects.clear();
+}
+
+void LayerManager::addDirtyRect(int x, int y, int w, int h)
+{
+    batchDirtyRects.push_back({x, y, w, h});
 }
 
 void LayerManager::setLayerVisibility(size_t index, bool visible)

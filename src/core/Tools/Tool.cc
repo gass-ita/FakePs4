@@ -13,21 +13,24 @@ void BrushTool::onPress(int x, int y, LayerManager &manager)
 
     manager.beginBatch();
     Line(x, y, x, y, r, g, b, a, size).draw(manager);
+
+    // add the dirty rect to the batch list
+    int minX = x - size;
+    int minY = y - size;
+    int maxX = x + size;
+    int maxY = y + size;
+    manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
+
     manager.endBatch();
 }
 
 void BrushTool::onHover(int x, int y, LayerManager &manager)
 {
     if (isDrawing)
-        return; // Don't show the hover cursor if we're actively drawing
-    // 1. Wipe the cursor from the last mouse position
+        return;
     manager.clearPreview();
 
-    // 2. Explicitly draw a dark gray outline to the scratchpad
-    // Notice the &LayerManager::setPreviewPixel argument!
     CircleOutline(x, y, size, 50, 50, 50, 255).draw(manager, &LayerManager::setPreviewPixel);
-
-    // 3. Ask Qt to repaint that tiny bounding box
     manager.showPreview();
 }
 void BrushTool::onMove(int x, int y, LayerManager &manager)
@@ -37,6 +40,13 @@ void BrushTool::onMove(int x, int y, LayerManager &manager)
 
     manager.beginBatch();
     Line(lastX, lastY, x, y, r, g, b, a, size).draw(manager);
+
+    // add the dirty rect to the batch list
+    int minX = std::min(lastX, x) - size;
+    int minY = std::min(lastY, y) - size;
+    int maxX = std::max(lastX, x) + size;
+    int maxY = std::max(lastY, y) + size;
+    manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
     manager.endBatch();
 
     lastX = x;
@@ -87,7 +97,6 @@ void RectangleTool::onRelease(int x, int y, LayerManager &manager)
     if (!isDrawing)
         return;
 
-    // CRITICAL: Wipe the temporary scratchpad shape completely!
     manager.clearPreview();
 
     int rectX = std::min(startX, x);
@@ -100,6 +109,10 @@ void RectangleTool::onRelease(int x, int y, LayerManager &manager)
         manager.beginBatch();
         // Default routing: This burns into the REAL active layer
         Rectangle(rectX, rectY, width, height, r, g, b, a, size).draw(manager);
+        manager.addDirtyRect(rectX - size, rectY - size, width + (size * 2), size + (size * 2));
+        manager.addDirtyRect(rectX - size, (rectY + height) - size - size, width + (size * 2), size + (size * 2));
+        manager.addDirtyRect(rectX - size, rectY - size, size + (size * 2), height + (size * 2));
+        manager.addDirtyRect((rectX + width) - size - size, rectY - size, size + (size * 2), height + (size * 2));
         manager.endBatch();
     }
 
@@ -154,6 +167,13 @@ void EllipseTool::onRelease(int x, int y, LayerManager &manager)
         manager.beginBatch();
         // Default routing to permanent memory
         Ellipse(cx, cy, rx, ry, r, g, b, a, size).draw(manager);
+        int pad = size;
+        int rectX = (cx - rx) - pad;
+        int rectY = (cy - ry) - pad;
+        int rectW = (rx * 2) + (pad * 2);
+        int rectH = (ry * 2) + (pad * 2);
+
+        manager.addDirtyRect(rectX, rectY, rectW, rectH);
         manager.endBatch();
     }
 
@@ -173,6 +193,11 @@ void EraserTool::onPress(int x, int y, LayerManager &manager)
     manager.beginBatch();
     // Draw a completely transparent pixel (Alpha = 0)
     Line(x, y, x, y, 0, 0, 0, 0, size).draw(manager);
+    int minX = std::min(lastX, x) - size;
+    int minY = std::min(lastY, y) - size;
+    int maxX = std::max(lastX, x) + size;
+    int maxY = std::max(lastY, y) + size;
+    manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
     manager.endBatch();
 }
 
@@ -196,6 +221,11 @@ void EraserTool::onMove(int x, int y, LayerManager &manager)
     manager.beginBatch();
     // Erase a stroke from the last position to the current one
     Line(lastX, lastY, x, y, 0, 0, 0, 0, size).draw(manager);
+    int minX = std::min(lastX, x) - size;
+    int minY = std::min(lastY, y) - size;
+    int maxX = std::max(lastX, x) + size;
+    int maxY = std::max(lastY, y) + size;
+    manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
     manager.endBatch();
 
     lastX = x;

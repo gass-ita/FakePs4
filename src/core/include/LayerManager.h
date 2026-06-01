@@ -10,6 +10,12 @@
 
 class LayerManager
 {
+public:
+    struct DirtyRect
+    {
+        int x, y, width, height;
+    };
+
 private:
     int width;
     int height;
@@ -19,7 +25,7 @@ private:
     std::vector<LMObserver *> observers;
 
     bool isBatching = false;
-    int batchMinX = 0, batchMinY = 0, batchMaxX = 0, batchMaxY = 0;
+    std::vector<DirtyRect> batchDirtyRects;
     std::vector<uint8_t> projectionCache;
 
     // preview logic
@@ -47,6 +53,7 @@ public:
     // Caching batching
     void beginBatch();
     void endBatch();
+    void addDirtyRect(int x, int y, int w, int h);
 
     // GETTERS for width and height
     int getWidth() const { return width; }
@@ -67,6 +74,7 @@ public:
     // saving and loading
     bool saveProject(const std::string &filepath) const;
     bool loadProject(const std::string &filepath);
+    // A simple struct to hold rectangle data
 
 private:
     // Helper function for the alpha blending math
