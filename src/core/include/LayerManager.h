@@ -1,7 +1,8 @@
 #ifndef LAYER_MANAGER_H
 #define LAYER_MANAGER_H
 
-#include "Layer.h"
+#include "ColorLayer.h"
+#include "MaskLayer.h"
 #include "LMObserver.h"
 #include <vector>
 #include <memory>
@@ -32,13 +33,13 @@ private:
     std::unordered_set<int> dirtyTiles;
 
     // preview logic
-    std::shared_ptr<Layer> previewLayer;
+    std::shared_ptr<ColorLayer> previewLayer;
     std::unordered_set<int> previewDirtyTiles;
 
 public:
     LayerManager(int width, int height);
 
-    void addLayer(const std::string &name = "New Layer");
+    void addLayer(const std::string &name = "New Layer", Layer::Type type = Layer::Type::Color);
 
     void addObserver(LMObserver *observer);
 

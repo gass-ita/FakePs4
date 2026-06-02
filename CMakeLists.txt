@@ -27,12 +27,14 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 # CONFIGURE_DEPENDS ensures CMake actively updates if you add/remove files in these directories
 file(GLOB SHAPE_SOURCES CONFIGURE_DEPENDS "src/core/Shapes/*.cc")
 file(GLOB TOOL_SOURCES CONFIGURE_DEPENDS "src/core/Tools/*.cc")
+file(GLOB LAYER_SOURCES CONFIGURE_DEPENDS "src/core/Layer/*.cc")
+file(GLOB LAYER_HEADERS CONFIGURE_DEPENDS "src/core/include/Layer/*.h")
 
 # 5. Define the Executable and Source Files (Replaces SOURCES += and HEADERS +=)
 # CMake handles .cc extensions automatically without needing a QMAKE_EXT_CPP flag
 add_executable(FakePs4
     src/main.cc
-    src/core/Layer.cc
+    ${LAYER_SOURCES}
     src/core/LayerManager.cc
     ${SHAPE_SOURCES}
     ${TOOL_SOURCES}
@@ -41,7 +43,7 @@ add_executable(FakePs4
     src/gui/MainWindow.cc
     
     # Header files are added here so they appear cleanly inside your IDE file trees
-    src/core/include/Layer.h
+    ${LAYER_HEADERS}
     src/core/include/LayerManager.h
     src/core/include/LMObserver.h
     src/core/include/Shape.h
@@ -52,6 +54,7 @@ add_executable(FakePs4
 # 6. Include Paths (Replaces INCLUDEPATH +=)
 target_include_directories(FakePs4 PRIVATE
     ${CMAKE_SOURCE_DIR}/src/core/include
+    ${CMAKE_SOURCE_DIR}/src/core/include/Layer
     ${CMAKE_SOURCE_DIR}/src/core
     ${CMAKE_SOURCE_DIR}/src/gui/include
     ${CMAKE_SOURCE_DIR}/src/gui

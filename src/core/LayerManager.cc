@@ -5,7 +5,7 @@
 LayerManager::LayerManager(int width, int height)
     : width(width), height(height)
 {
-    previewLayer = std::make_shared<Layer>(width, height, "Preview Layer");
+    previewLayer = std::make_shared<ColorLayer>(width, height, "Preview Layer");
     projectionCache.resize(width * height * 4, 0);
     addLayer("Background");
 
@@ -16,9 +16,20 @@ LayerManager::LayerManager(int width, int height)
     markRegionDirty(0, 0, width, height);
 }
 
-void LayerManager::addLayer(const std::string &name)
+void LayerManager::addLayer(const std::string &name, Layer::Type type)
 {
-    layers.push_back(std::make_shared<Layer>(width, height, name));
+    switch (type)
+    {
+    case Layer::Type::Color:
+        layers.push_back(std::make_shared<ColorLayer>(width, height, name));
+        break;
+    case Layer::Type::Mask:
+        layers.push_back(std::make_shared<MaskLayer>(width, height, name));
+        break;
+    default:
+        layers.push_back(std::make_shared<ColorLayer>(width, height, name));
+        break;
+    }
 }
 
 void LayerManager::addObserver(LMObserver *observer)
@@ -54,7 +65,6 @@ void LayerManager::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8
 
     if (!isBatching)
     {
-        // Normal immediate update
         markRegionDirty(x, y, 1, 1);
     }
 }
@@ -251,8 +261,6 @@ void LayerManager::addDirtyRect(int x, int y, int w, int h)
         for (int tx = txStart; tx <= txEnd; ++tx)
         {
             int tileIndex = ty * tilesX + tx;
-
-            // The std::unordered_set automatically ignores duplicates!
             dirtyTiles.insert(tileIndex);
         }
     }
