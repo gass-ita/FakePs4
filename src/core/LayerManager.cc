@@ -86,45 +86,87 @@ void LayerManager::updateCache(int startX, int startY, int rWidth, int rHeight)
     int x1 = std::min(width, startX + rWidth);
     int y1 = std::min(height, startY + rHeight);
 
+    if (x1 <= x0 || y1 <= y0)
+        return;
+
     for (int y = y0; y < y1; ++y)
     {
-        for (int x = x0; x < x1; ++x)
+        int ty = y / TILE_SIZE;     // The Y coordinate on the tile grid
+        int localY = y % TILE_SIZE; // The Y coordinate strictly inside the 64x64 tile
+
+        for (int x = x0; x < x1;)
         {
-            int globalIdx = (y * width + x) * 4;
+            int tx = x / TILE_SIZE;     // The X coordinate on the tile grid
+            int localX = x % TILE_SIZE; // The X coordinate strictly inside the 64x64 tile
 
-            // 1. Reset cache pixel to completely transparent
-            projectionCache[globalIdx] = 0;
-            projectionCache[globalIdx + 1] = 0;
-            projectionCache[globalIdx + 2] = 0;
-            projectionCache[globalIdx + 3] = 0;
+            // Calculate how many pixels we can process before we cross into the next 64x64 tile
+            int pixelsToProcess = std::min(x1 - x, TILE_SIZE - localX);
 
-            // 2. Re-composite all layers
+            // 1. GATHER PHASE: Get raw memory pointers for this specific 64x64 block
+            std::vector<std::pair<const uint8_t *, float>> activeTiles;
+
+            // Pre-allocate memory to avoid reallocations in the loop
+            activeTiles.reserve(layers.size());
+
             for (const auto &layer : layers)
             {
                 if (!layer->visible)
                     continue;
 
-                uint8_t &br = projectionCache[globalIdx];
-                uint8_t &bg = projectionCache[globalIdx + 1];
-                uint8_t &bb = projectionCache[globalIdx + 2];
-                uint8_t &ba = projectionCache[globalIdx + 3];
+                // Grab the raw pointer. If the tile is empty, this returns nullptr.
+                const Tile *tile = layer->getTile(tx, ty);
 
-                uint8_t tr, tg, tb, ta;
-
-                // NEW: Safely ask the layer for the pixel data!
-                // If the tile is empty, this instantly returns 0 without allocating memory.
-                layer->getPixel(x, y, tr, tg, tb, ta);
-
-                if (ta > 0)
+                if (tile != nullptr)
                 {
-                    blendPixels(br, bg, bb, ba, tr, tg, tb, ta, layer->opacity);
+                    activeTiles.push_back({tile->data.data(), layer->opacity});
                 }
             }
+
+            // 2. COMPOSITE PHASE: Loop through the chunk using the raw arrays
+            for (int i = 0; i < pixelsToProcess; ++i)
+            {
+                int currentX = x + i;
+                int globalIdx = (y * width + currentX) * 4;
+
+                // Calculate the exact index inside the 64x64 flat tile vector
+                int localTileIdx = (localY * TILE_SIZE + (localX + i)) * 4;
+
+                uint8_t &outR = projectionCache[globalIdx];
+                uint8_t &outG = projectionCache[globalIdx + 1];
+                uint8_t &outB = projectionCache[globalIdx + 2];
+                uint8_t &outA = projectionCache[globalIdx + 3];
+
+                // Reset cache pixel to transparent
+                outR = 0;
+                outG = 0;
+                outB = 0;
+                outA = 0;
+
+                for (const auto &activeTile : activeTiles)
+                {
+                    const uint8_t *tileData = activeTile.first;
+                    float opacity = activeTile.second;
+
+                    // Direct memory access. No virtual function overhead!
+                    uint8_t tr = tileData[localTileIdx];
+                    uint8_t tg = tileData[localTileIdx + 1];
+                    uint8_t tb = tileData[localTileIdx + 2];
+                    uint8_t ta = tileData[localTileIdx + 3];
+
+                    if (ta > 0)
+                    {
+                        blendPixels(outR, outG, outB, outA, tr, tg, tb, ta, opacity);
+                    }
+                }
+            }
+
+            // 3. Jump forward by the chunk size we just processed
+            x += pixelsToProcess;
         }
     }
 }
 
-std::vector<uint8_t> LayerManager::renderRegion(int startX, int startY, int rWidth, int rHeight) const
+void LayerManager::renderRegion(int startX, int startY, int rWidth, int rHeight, std::vector<uint8_t> &outBuffer) const
 {
     int x0 = std::max(0, startX);
     int y0 = std::max(0, startY);
@@ -135,24 +177,29 @@ std::vector<uint8_t> LayerManager::renderRegion(int startX, int startY, int rWid
     int h = y1 - y0;
 
     if (w <= 0 || h <= 0)
-        return {};
+        return;
 
-    std::vector<uint8_t> regionBuffer(w * h * 4, 0);
+    size_t requiredSize = w * h * 4;
 
-    // Copy the memory row by row
+    // 1. THE FIX: Only allocate memory if the buffer is too small.
+    // If we call this every frame with the same dimensions, this does zero heap allocations!
+    if (outBuffer.size() != requiredSize)
+    {
+        outBuffer.resize(requiredSize);
+    }
+
+    // 2. Copy the cached composited image row by row into our buffer
     for (int y = 0; y < h; ++y)
     {
         int globalIdx = ((y0 + y) * width + x0) * 4;
         int localIdx = (y * w) * 4;
 
-        // std::copy is highly optimized by the compiler for flat memory operations
         std::copy(projectionCache.begin() + globalIdx,
                   projectionCache.begin() + globalIdx + (w * 4),
-                  regionBuffer.begin() + localIdx);
+                  outBuffer.begin() + localIdx);
     }
 
-    // add the preview layer on top of the cache if it has any pixels in this region
-    // add the preview layer on top of the cache if it has any pixels in this region
+    // 3. Add the preview layer on top if it exists
     if (previewLayer)
     {
         for (int y = 0; y < h; ++y)
@@ -164,29 +211,25 @@ std::vector<uint8_t> LayerManager::renderRegion(int startX, int startY, int rWid
                 int globalY = y0 + y;
 
                 uint8_t tr, tg, tb, ta;
-                // NEW: Use getPixel for the preview layer too
                 previewLayer->getPixel(globalX, globalY, tr, tg, tb, ta);
 
-                // Only do math if the preview pixel exists
                 if (ta > 0)
                 {
-                    uint8_t &br = regionBuffer[localIdx];
-                    uint8_t &bg = regionBuffer[localIdx + 1];
-                    uint8_t &bb = regionBuffer[localIdx + 2];
-                    uint8_t &ba = regionBuffer[localIdx + 3];
+                    uint8_t &br = outBuffer[localIdx];
+                    uint8_t &bg = outBuffer[localIdx + 1];
+                    uint8_t &bb = outBuffer[localIdx + 2];
+                    uint8_t &ba = outBuffer[localIdx + 3];
 
                     blendPixels(br, bg, bb, ba, tr, tg, tb, ta, 1.0f);
                 }
             }
         }
     }
-
-    return regionBuffer;
 }
 
-std::vector<uint8_t> LayerManager::render() const
+void LayerManager::render(std::vector<uint8_t> &outBuffer) const
 {
-    return renderRegion(0, 0, width, height);
+    renderRegion(0, 0, width, height, outBuffer);
 }
 
 void LayerManager::blendPixels(uint8_t &outR, uint8_t &outG, uint8_t &outB, uint8_t &outA,
@@ -211,8 +254,7 @@ void LayerManager::blendPixels(uint8_t &outR, uint8_t &outG, uint8_t &outB, uint
     outR = (topR * effectiveAlpha + outR * invAlpha) / 255;
     outG = (topG * effectiveAlpha + outG * invAlpha) / 255;
     outB = (topB * effectiveAlpha + outB * invAlpha) / 255;
-
-    outA = outA + effectiveAlpha - (outA * effectiveAlpha) / 255;
+    outA = (effectiveAlpha + (outA * invAlpha) / 255);
 }
 
 // Batching methods

@@ -161,7 +161,7 @@ void Canvas::paintEvent(QPaintEvent *event)
     QRect screenDirty = event->rect();
     int ix = (screenDirty.x() - panOffset.x()) / zoom;
     int iy = (screenDirty.y() - panOffset.y()) / zoom;
-    int iw = (screenDirty.width() / zoom) + 2; // +2 to cover edge pixels
+    int iw = (screenDirty.width() / zoom) + 2;
     int ih = (screenDirty.height() / zoom) + 2;
 
     // 3. Clamp the request so we don't ask the LayerManager for out-of-bounds memory
@@ -174,13 +174,14 @@ void Canvas::paintEvent(QPaintEvent *event)
     if (realW <= 0 || realH <= 0)
         return;
 
-    // 4. Ask the pure C++ core for exactly that tiny region
-    std::vector<uint8_t> buffer = layerManager.renderRegion(realX, realY, realW, realH);
-    if (buffer.empty())
-        return;
+    // 4. THE CORRECTION: Pass our persistent frameBuffer by reference!
+    // This entirely eliminates the heap allocation stutter.
+    layerManager.renderRegion(realX, realY, realW, realH, frameBuffer);
 
     // 5. Wrap the memory in a Qt Image
-    QImage image(buffer.data(), realW, realH, QImage::Format_RGBA8888);
+    // Because frameBuffer belongs to the class, this memory is guaranteed to be stable.
+    // Make sure you use the 'bytesPerLine' argument (realW * 4) to prevent row-alignment skewing!
+    QImage image(frameBuffer.data(), realW, realH, realW * 4, QImage::Format_RGBA8888);
 
     // 6. Use Qt's hardware scaling to put it on the screen perfectly
     painter.translate(panOffset.x() + (realX * zoom), panOffset.y() + (realY * zoom));
@@ -192,7 +193,6 @@ void Canvas::paintEvent(QPaintEvent *event)
     painter.drawImage(0, 0, image);
 }
 
-// 3. Add the leaveEvent at the bottom of the file
 void Canvas::leaveEvent(QEvent *event)
 {
     QWidget::leaveEvent(event);

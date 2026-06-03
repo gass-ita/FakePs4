@@ -24,7 +24,7 @@ private:
     int height;
     size_t activeLayerIndex = 0;
 
-    std::vector<std::shared_ptr<Layer>> layers;
+    std::vector<std::shared_ptr<TiledLayer>> layers;
     std::vector<LMObserver *> observers;
 
     bool isBatching = false;
@@ -45,9 +45,8 @@ public:
 
     void markRegionDirty(int x, int y, int w, int h, bool skipCache = false);
 
-    std::vector<uint8_t> render() const;
-
-    std::vector<uint8_t> renderRegion(int startX, int startY, int regionWidth, int regionHeight) const;
+    void renderRegion(int startX, int startY, int rWidth, int rHeight, std::vector<uint8_t> &outBuffer) const;
+    void render(std::vector<uint8_t> &outBuffer) const;
 
     void setActiveLayer(size_t index);
 
@@ -62,7 +61,7 @@ public:
     // GETTERS for width and height
     int getWidth() const { return width; }
     int getHeight() const { return height; }
-    const std::vector<std::shared_ptr<Layer>> &getLayers() const { return layers; }
+    const std::vector<std::shared_ptr<TiledLayer>> &getLayers() const { return layers; }
     size_t getActiveLayerIndex() const { return activeLayerIndex; }
 
     void setLayerVisibility(size_t index, bool visible);

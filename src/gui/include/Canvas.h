@@ -73,6 +73,8 @@ private:
     int currentToolSize = 5;
     LayerManager layerManager;
     std::shared_ptr<Tool> currentTool;
+    std::vector<uint8_t> frameBuffer;
+
     QPoint lastPos;
     uint8_t r = 0, g = 0, b = 0, a = 255; // active color (default black)
 

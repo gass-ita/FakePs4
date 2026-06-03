@@ -85,7 +85,7 @@ bool LayerManager::loadProject(const std::string &filepath)
         uint8_t type;
         in.read(reinterpret_cast<char *>(&type), sizeof(type));
 
-        std::shared_ptr<Layer> newLayer;
+        std::shared_ptr<TiledLayer> newLayer;
         if (type == static_cast<uint8_t>(Layer::Type::Color))
         {
             newLayer = std::make_shared<ColorLayer>(width, height, name);

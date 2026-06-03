@@ -29,6 +29,7 @@ protected:
 public:
     TiledLayer(int w, int h, const std::string &n, size_t chans);
 
+    const Tile *getTile(int tileX, int tileY) const;
     void clear() override;
     void fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a) override = 0;
 };
