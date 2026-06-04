@@ -1,6 +1,7 @@
 #include "Tool.h"
 #include <iostream>
 #include <cmath>
+// for round
 
 // ==========================================
 // STROKE TOOL (Base Class Boilerplate)
@@ -9,8 +10,18 @@ void StrokeTool::onPress(int x, int y, LayerManager &manager)
 {
     manager.clearPreview();
     isDrawing = true;
+
+    // Reset the Stabilizer History!
+    pointHistory.clear();
+    for (int i = 0; i < smoothingWindow; ++i)
+    {
+        pointHistory.push_back({x, y});
+    }
+
     lastX = x;
     lastY = y;
+    prevX = lastX;
+    prevY = lastY;
 
     manager.beginBatch();
     drawLineSegment(x, y, x, y, manager);
@@ -23,19 +34,77 @@ void StrokeTool::onMove(int x, int y, LayerManager &manager)
     if (!isDrawing)
         return;
 
+    // --- 1. STABILIZER (MOVING AVERAGE) ---
+    pointHistory.push_back({x, y});
+    if (pointHistory.size() > smoothingWindow)
+    {
+        pointHistory.pop_front();
+    }
+
+    int avgX = 0;
+    int avgY = 0;
+    for (const auto &p : pointHistory)
+    {
+        avgX += p.first;
+        avgY += p.second;
+    }
+
+    // WATCH OUT! Cast the size_t to an int to preserve negative coordinates!
+    int historyCount = static_cast<int>(pointHistory.size());
+    avgX /= historyCount;
+    avgY /= historyCount;
+    // --------------------------------------
+
     manager.beginBatch();
-    drawLineSegment(lastX, lastY, x, y, manager);
 
-    int minX = std::min(lastX, x) - size;
-    int minY = std::min(lastY, y) - size;
-    int maxX = std::max(lastX, x) + size;
-    int maxY = std::max(lastY, y) + size;
-    manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
+    int currentX = avgX;
+    int currentY = avgY;
 
+    // 2. Midpoint calculation
+    int startMidX = (prevX + lastX) / 2;
+    int startMidY = (prevY + lastY) / 2;
+    int endMidX = (lastX + currentX) / 2;
+    int endMidY = (lastY + currentY) / 2;
+
+    // 3. Distance calculation (still using float for std::sqrt, but casting result to int)
+    float dist1 = std::sqrt(std::pow(lastX - startMidX, 2) + std::pow(lastY - startMidY, 2));
+    float dist2 = std::sqrt(std::pow(endMidX - lastX, 2) + std::pow(endMidY - lastY, 2));
+    int steps = std::max(1, static_cast<int>(dist1 + dist2));
+
+    int minX = x, minY = y, maxX = x, maxY = y;
+
+    int currentSegX = startMidX;
+    int currentSegY = startMidY;
+
+    // 4. Step along the curve
+    for (int i = 1; i <= steps; ++i)
+    {
+        float t = static_cast<float>(i) / steps; // 't' remains a float percentage
+        int nextX, nextY;
+
+        calculateBezierPoint(t, startMidX, lastX, endMidX, nextX);
+        calculateBezierPoint(t, startMidY, lastY, endMidY, nextY);
+
+        drawLineSegment(currentSegX, currentSegY, nextX, nextY, manager);
+
+        minX = std::min({minX, currentSegX, nextX});
+        minY = std::min({minY, currentSegY, nextY});
+        maxX = std::max({maxX, currentSegX, nextX});
+        maxY = std::max({maxY, currentSegY, nextY});
+
+        currentSegX = nextX;
+        currentSegY = nextY;
+    }
+
+    // 5. Submit Dirty Rect
+    manager.addDirtyRect(minX - size, minY - size, (maxX - minX) + size * 2 + 1, (maxY - minY) + size * 2 + 1);
     manager.endBatch();
 
-    lastX = x;
-    lastY = y;
+    // 6. Shift history
+    prevX = lastX;
+    prevY = lastY;
+    lastX = currentX;
+    lastY = currentY;
 }
 
 void StrokeTool::onRelease(int x, int y, LayerManager &manager)

@@ -2,6 +2,9 @@
 #define TOOL_H
 #include "LayerManager.h"
 #include "Shape.h" // Assuming this is where Line, Rectangle, Ellipse are
+#include <deque>
+#include <algorithm>
+#include <cmath>
 
 class Tool
 {
@@ -32,9 +35,36 @@ public:
 class StrokeTool : public Tool
 {
 protected:
+    /*
+     * ==============================================================================
+     * BEZIER CURVE HISTORY (Why we need both 'last' and 'prev')
+     * ==============================================================================
+     * A Quadratic Bezier curve mathematically requires exactly 3 points to exist:
+     * 1. P0: Start Anchor
+     * 2. P1: Control Point (Acts as "gravity" to pull the curve)
+     * 3. P2: End Anchor
+     *
+     * To make brush strokes perfectly seamless without jagged corners, we do not draw
+     * directly from mouse-point to mouse-point. Instead, we draw from the MIDPOINT of
+     * old points to the MIDPOINT of new points.
+     *
+     * - 'current': The smoothed mouse position right now.
+     * - 'last':    The position 1 frame ago (Used as the P1 Control Point).
+     * - 'prev':    The position 2 frames ago.
+     *
+     * We MUST track 'prev' because we need it to calculate the Start Anchor (P0),
+     * which is the midpoint between 'prev' and 'last'. This guarantees the new curve
+     * starts at the exact same pixel and tangent angle where the previous curve ended,
+     * creating the illusion of one continuous, fluid ink stroke.
+     */
     bool isDrawing = false;
     int lastX = 0;
     int lastY = 0;
+    int prevX = 0;
+    int prevY = 0;
+
+    short int smoothingWindow = 12;
+    std::deque<std::pair<int, int>> pointHistory;
 
     // Pure virtual functions that child classes MUST implement
     virtual void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) = 0;
@@ -45,6 +75,13 @@ public:
     void onMove(int x, int y, LayerManager &manager) override;
     void onRelease(int x, int y, LayerManager &manager) override;
     void onHover(int x, int y, LayerManager &manager) override;
+
+private:
+    void calculateBezierPoint(float t, int p0, int p1, int p2, int &out)
+    {
+        float u = 1.0f - t;
+        out = std::round((u * u * p0) + (2.0f * u * t * p1) + (t * t * p2));
+    }
 };
 
 // ==========================================
