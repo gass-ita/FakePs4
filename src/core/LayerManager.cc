@@ -79,6 +79,24 @@ void LayerManager::getPixel(int x, int y, uint8_t &r, uint8_t &g, uint8_t &b, ui
     layers[activeLayerIndex]->getPixel(x, y, r, g, b, a);
 }
 
+void LayerManager::applyFilter(Filter &filter)
+{
+    // TODO: after adding the Mask layer update only the affected tiles instead of the whole layer
+    if (activeLayerIndex >= layers.size())
+        return;
+    TiledLayer *activeLayer = layers[activeLayerIndex].get();
+
+    // 1. Lock the drawing state
+    beginBatch();
+
+    // 2. Execute the pure math filter directly on the layer
+    filter.apply(activeLayer);
+
+    // 3. Force a full-screen redraw so the user sees the result
+    addDirtyRect(0, 0, width, height);
+    endBatch();
+}
+
 void LayerManager::updateCache(int startX, int startY, int rWidth, int rHeight)
 {
     int x0 = std::max(0, startX);

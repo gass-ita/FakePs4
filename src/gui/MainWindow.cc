@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "Tool.h"
+#include "ConvolutionFilter.h"
 #include <QColorDialog>
 #include <QPixmap>
 #include <QSlider>
@@ -17,96 +18,104 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QPushButton>
+#include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QProgressDialog>
+#include <QtConcurrent>
+#include <QComboBox>
+#include <QStackedWidget>
+#include <QFormLayout>
+#include <QFutureWatcher>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
-        setWindowTitle("FakePs4");
+    setWindowTitle("FakePs4");
 
-        canvas = new Canvas(this);
-        setCentralWidget(canvas);
+    canvas = new Canvas(this);
+    setCentralWidget(canvas);
 
-        QToolBar *toolbar = addToolBar("Tools");
+    QToolBar *toolbar = addToolBar("Tools");
 
-        // Add Tools
-        QAction *brushAction = toolbar->addAction("Brush");
-        QAction *eraserAction = toolbar->addAction("Eraser");
-        QAction *rectAction = toolbar->addAction("Rectangle");
-        QAction *ellipseAction = toolbar->addAction("Ellipse");
-        QAction *fillAction = toolbar->addAction("Fill");
+    // Add Tools
+    QAction *brushAction = toolbar->addAction("Brush");
+    QAction *eraserAction = toolbar->addAction("Eraser");
+    QAction *rectAction = toolbar->addAction("Rectangle");
+    QAction *ellipseAction = toolbar->addAction("Ellipse");
+    QAction *fillAction = toolbar->addAction("Fill");
 
-        toolbar->addSeparator(); // Add a nice visual line
+    toolbar->addSeparator(); // Add a nice visual line
 
-        QPixmap colorPixmap(24, 24);
-        colorPixmap.fill(Qt::red);
+    QPixmap colorPixmap(24, 24);
+    colorPixmap.fill(Qt::red);
 
-        QAction *colorAction = toolbar->addAction(QIcon(colorPixmap), "Color");
-        toolbar->addSeparator();
+    QAction *colorAction = toolbar->addAction(QIcon(colorPixmap), "Color");
+    toolbar->addSeparator();
 
-        // Add Size Slider Label
-        toolbar->addWidget(new QLabel(" Size: "));
+    // Add Size Slider Label
+    toolbar->addWidget(new QLabel(" Size: "));
 
-        // Create the Slider
-        QSlider *sizeSlider = new QSlider(Qt::Horizontal);
-        sizeSlider->setRange(1, 50); // Brush size from 1px to 50px
-        sizeSlider->setValue(5);     // Default to 5
-        sizeSlider->setFixedWidth(150);
-        toolbar->addWidget(sizeSlider);
+    // Create the Slider
+    QSlider *sizeSlider = new QSlider(Qt::Horizontal);
+    sizeSlider->setRange(1, 50); // Brush size from 1px to 50px
+    sizeSlider->setValue(5);     // Default to 5
+    sizeSlider->setFixedWidth(150);
+    toolbar->addWidget(sizeSlider);
 
-        QDockWidget *layerDock = new QDockWidget("Layers", this);
-        layerDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    QDockWidget *layerDock = new QDockWidget("Layers", this);
+    layerDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-        QWidget *dockContents = new QWidget();
-        QVBoxLayout *dockLayout = new QVBoxLayout(dockContents);
+    QWidget *dockContents = new QWidget();
+    QVBoxLayout *dockLayout = new QVBoxLayout(dockContents);
 
-        QListWidget *layerList = new QListWidget();
-        layerList->setContextMenuPolicy(Qt::CustomContextMenu);
+    QListWidget *layerList = new QListWidget();
+    layerList->setContextMenuPolicy(Qt::CustomContextMenu);
 
-        // Helper lambda to create a fully interactive list item
-        auto createLayerItem = [](const QString &name)
-        {
-                QListWidgetItem *item = new QListWidgetItem(name);
-                // Enable selection, double-click editing, and checkboxes
-                item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsUserCheckable);
-                item->setCheckState(Qt::Checked); // Visible by default
-                return item;
-        };
+    // Helper lambda to create a fully interactive list item
+    auto createLayerItem = [](const QString &name)
+    {
+        QListWidgetItem *item = new QListWidgetItem(name);
+        // Enable selection, double-click editing, and checkboxes
+        item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Checked); // Visible by default
+        return item;
+    };
 
-        // Add the initial Background layer
-        layerList->addItem(createLayerItem("Background"));
-        layerList->setCurrentRow(0);
+    // Add the initial Background layer
+    layerList->addItem(createLayerItem("Background"));
+    layerList->setCurrentRow(0);
 
-        QPushButton *addLayerBtn = new QPushButton("Add New Layer");
+    QPushButton *addLayerBtn = new QPushButton("Add New Layer");
 
-        dockLayout->addWidget(layerList);
-        dockLayout->addWidget(addLayerBtn);
-        layerDock->setWidget(dockContents);
-        addDockWidget(Qt::RightDockWidgetArea, layerDock);
+    dockLayout->addWidget(layerList);
+    dockLayout->addWidget(addLayerBtn);
+    layerDock->setWidget(dockContents);
+    addDockWidget(Qt::RightDockWidgetArea, layerDock);
 
-        // ==========================================
-        // CONNECTIONS
-        // ==========================================
-        connect(brushAction, &QAction::triggered, this, [this]()
-                { canvas->setTool(std::make_shared<BrushTool>()); });
+    // ==========================================
+    // CONNECTIONS
+    // ==========================================
+    connect(brushAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_shared<BrushTool>()); });
 
-        connect(eraserAction, &QAction::triggered, this, [this]()
-                { canvas->setTool(std::make_shared<EraserTool>()); });
+    connect(eraserAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_shared<EraserTool>()); });
 
-        connect(rectAction, &QAction::triggered, this, [this]()
-                { canvas->setTool(std::make_shared<RectangleTool>()); });
+    connect(rectAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_shared<RectangleTool>()); });
 
-        // When the slider moves, tell the Canvas to update the tool size
-        connect(sizeSlider, &QSlider::valueChanged, this, [this](int value)
-                { canvas->setToolSize(value); });
-        connect(ellipseAction, &QAction::triggered, this, [this]()
-                { canvas->setTool(std::make_shared<EllipseTool>()); });
-        connect(fillAction, &QAction::triggered, this, [this]()
-                { canvas->setTool(std::make_shared<FillTool>()); });
-        // Set the default tool to Brush
-        canvas->setTool(std::make_shared<BrushTool>());
+    // When the slider moves, tell the Canvas to update the tool size
+    connect(sizeSlider, &QSlider::valueChanged, this, [this](int value)
+            { canvas->setToolSize(value); });
+    connect(ellipseAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_shared<EllipseTool>()); });
+    connect(fillAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_shared<FillTool>()); });
+    // Set the default tool to Brush
+    canvas->setTool(std::make_shared<BrushTool>());
 
-        // Wire up the Color Picker
-        connect(colorAction, &QAction::triggered, this, [this, colorAction]()
-                {
+    // Wire up the Color Picker
+    connect(colorAction, &QAction::triggered, this, [this, colorAction]()
+            {
         
         // ADD THE FLAG HERE: QColorDialog::ShowAlphaChannel
         QColor newColor = QColorDialog::getColor(
@@ -130,9 +139,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             colorAction->setIcon(QIcon(pixmap));
         } });
 
-        // 1. Add Layer Button
-        connect(addLayerBtn, &QPushButton::clicked, this, [this, layerList, createLayerItem]()
-                {
+    // 1. Add Layer Button
+    connect(addLayerBtn, &QPushButton::clicked, this, [this, layerList, createLayerItem]()
+            {
         int newIndex = layerList->count();
         QString layerName = QString("Layer %1").arg(newIndex);
         
@@ -142,17 +151,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         layerList->addItem(createLayerItem(layerName));
         layerList->setCurrentRow(newIndex); });
 
-        // 2. Change Active Layer (Clicking an item)
-        connect(layerList, &QListWidget::currentRowChanged, this, [this](int row)
-                {
+    // 2. Change Active Layer (Clicking an item)
+    connect(layerList, &QListWidget::currentRowChanged, this, [this](int row)
+            {
         if (row >= 0) {
             canvas->setActiveLayer(row);
         } });
 
-        // 3. Rename or Toggle Visibility
-        // This fires whenever a checkbox is clicked OR text is edited
-        connect(layerList, &QListWidget::itemChanged, this, [this, layerList](QListWidgetItem *item)
-                {
+    // 3. Rename or Toggle Visibility
+    // This fires whenever a checkbox is clicked OR text is edited
+    connect(layerList, &QListWidget::itemChanged, this, [this, layerList](QListWidgetItem *item)
+            {
         int row = layerList->row(item);
         if (row < 0) return;
 
@@ -163,8 +172,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         // Sync the name
         canvas->setLayerName(row, item->text()); });
 
-        connect(layerList, &QListWidget::customContextMenuRequested, this, [this, layerList](const QPoint &pos)
-                {
+    connect(layerList, &QListWidget::customContextMenuRequested, this, [this, layerList](const QPoint &pos)
+            {
         // Find exactly which layer item they right-clicked on
         QListWidgetItem *item = layerList->itemAt(pos);
         
@@ -174,7 +183,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         // Create the popup menu
         QMenu contextMenu(this);
         QAction *renameAction = contextMenu.addAction("Rename");
-        QAction *propertiesAction = contextMenu.addAction("Properties..."); // <--- NEW ACTION
+        QAction *propertiesAction = contextMenu.addAction("Properties...");
+        QAction *filterAction = contextMenu.addAction("Filter..."); // <--- NEW ACTION
 
         // Spawn the menu exactly where the mouse cursor is
         QAction *selectedAction = contextMenu.exec(layerList->mapToGlobal(pos));
@@ -183,7 +193,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         if (selectedAction == renameAction) {
             layerList->editItem(item);
         } 
-        // ACTION 2: PROPERTIES (OPACITY SLIDER)
         // ACTION 2: PROPERTIES (OPACITY SLIDER)
         else if (selectedAction == propertiesAction) {
             
@@ -203,49 +212,197 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             slider.setRange(0, 100);
             slider.setValue(currentPercentage);
 
-            // 1. Create the native Button Box
             QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Apply);
 
             layout.addWidget(&label);
             layout.addWidget(&slider);
-            layout.addWidget(&buttonBox); // Add buttons to the bottom
+            layout.addWidget(&buttonBox);
 
-            // ==========================================
-            // NEW DISCONNECTED LOGIC
-            // ==========================================
-
-            // 2. Dragging the slider ONLY updates the text label now. 
-            // It does NOT touch the engine.
             connect(&slider, &QSlider::valueChanged, this, [&label](int value){
                 label.setText(QString("Opacity: %1%").arg(value));
             });
 
-            // 3. Clicking "Apply" updates the engine, but keeps the window open
             connect(buttonBox.button(QDialogButtonBox::Apply), &QPushButton::clicked, this, [this, &slider, row]() {
                 canvas->setLayerOpacity(row, slider.value());
             });
 
-            // 4. Clicking "OK" updates the engine AND closes the window
             connect(&buttonBox, &QDialogButtonBox::accepted, this, [this, &dialog, &slider, row]() {
                 canvas->setLayerOpacity(row, slider.value());
-                dialog.accept(); // Closes the dialog successfully
+                dialog.accept(); 
             });
 
-            // 5. Clicking "Cancel" simply closes the window without updating the engine
             connect(&buttonBox, &QDialogButtonBox::rejected, this, [&dialog]() {
-                dialog.reject(); // Closes the dialog with no action
+                dialog.reject(); 
             });
 
             dialog.exec();
-        } });
+        }
+        // ==========================================
+        // ACTION 3: FILTER (DYNAMIC DROPDOWN)
+        // ==========================================
+        else if (selectedAction == filterAction)
+        {
+            int row = layerList->row(item);
 
-        // Saving and Loading
-        // ==========================================
-        // SAVE NATIVE PROJECT (Ctrl+S)
-        // ==========================================
-        QShortcut *saveShortcut = new QShortcut(QKeySequence::Save, this);
-        connect(saveShortcut, &QShortcut::activated, this, [this]()
-                {
+            // Force the clicked layer to become the active one so applyFilter targets it!
+            layerList->setCurrentRow(row);
+            canvas->setActiveLayer(row);
+
+            QDialog dialog(this);
+            dialog.setWindowTitle("Apply Filter");
+            dialog.setMinimumWidth(300);
+
+            QVBoxLayout layout(&dialog);
+
+            // 1. The Dropdown Menu
+            QComboBox *filterCombo = new QComboBox(&dialog);
+            filterCombo->addItems({"Gaussian Blur",
+                                   "Sharpen",
+                                   "Edge Detection",
+                                   "Emboss",
+                                   "Invert Colors",
+                                   "Grayscale",
+                                   "Brightness / Contrast"});
+            layout.addWidget(new QLabel("Select Filter:"));
+            layout.addWidget(filterCombo);
+
+            // 2. The Stacked UI (Changes based on dropdown)
+            QStackedWidget *stackedParams = new QStackedWidget(&dialog);
+
+            // --- PAGE 0: Gaussian Blur ---
+            QWidget *pageGaussian = new QWidget();
+            QFormLayout *layoutGaussian = new QFormLayout(pageGaussian);
+            QSpinBox *sizeSpin = new QSpinBox();
+            sizeSpin->setRange(3, 51);
+            sizeSpin->setSingleStep(2);
+            sizeSpin->setValue(5);
+            QDoubleSpinBox *sigmaSpin = new QDoubleSpinBox();
+            sigmaSpin->setRange(0.1, 15.0);
+            sigmaSpin->setSingleStep(0.5);
+            sigmaSpin->setValue(1.0);
+            layoutGaussian->addRow("Kernel Size:", sizeSpin);
+            layoutGaussian->addRow("Sigma:", sigmaSpin);
+            stackedParams->addWidget(pageGaussian);
+
+            // --- PAGE 1: Convolution Intensity (Sharpen, Edge, Emboss) ---
+            QWidget *pageIntensity = new QWidget();
+            QFormLayout *layoutIntensity = new QFormLayout(pageIntensity);
+            QDoubleSpinBox *intensitySpin = new QDoubleSpinBox();
+            intensitySpin->setRange(0.0, 5.0);
+            intensitySpin->setSingleStep(0.1);
+            intensitySpin->setValue(1.0);
+            layoutIntensity->addRow("Intensity:", intensitySpin);
+            stackedParams->addWidget(pageIntensity);
+
+            // --- PAGE 2: Blend Amount (Invert, Grayscale) ---
+            QWidget *pageBlend = new QWidget();
+            QFormLayout *layoutBlend = new QFormLayout(pageBlend);
+            QDoubleSpinBox *blendSpin = new QDoubleSpinBox();
+            blendSpin->setRange(0.0, 1.0);
+            blendSpin->setSingleStep(0.1);
+            blendSpin->setValue(1.0);
+            layoutBlend->addRow("Blend Amount:", blendSpin);
+            stackedParams->addWidget(pageBlend);
+
+            // --- PAGE 3: Brightness & Contrast ---
+            QWidget *pageBC = new QWidget();
+            QFormLayout *layoutBC = new QFormLayout(pageBC);
+            QDoubleSpinBox *brightSpin = new QDoubleSpinBox();
+            brightSpin->setRange(-255.0, 255.0);
+            brightSpin->setValue(0.0);
+            QDoubleSpinBox *contrastSpin = new QDoubleSpinBox();
+            contrastSpin->setRange(-255.0, 255.0);
+            contrastSpin->setValue(0.0);
+            layoutBC->addRow("Brightness:", brightSpin);
+            layoutBC->addRow("Contrast:", contrastSpin);
+            stackedParams->addWidget(pageBC);
+
+            layout.addWidget(stackedParams);
+
+            // 3. Connect Dropdown to Stacked UI
+            connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), [stackedParams](int index)
+                    {
+                        if (index == 0)
+                            stackedParams->setCurrentIndex(0); // Gaussian
+                        else if (index >= 1 && index <= 3)
+                            stackedParams->setCurrentIndex(1); // Convolution (Sharpen, etc)
+                        else if (index >= 4 && index <= 5)
+                            stackedParams->setCurrentIndex(2); // Point (Invert, Gray)
+                        else if (index == 6)
+                            stackedParams->setCurrentIndex(3); // Brightness/Contrast
+                    });
+
+            // 4. Buttons
+            QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+            layout.addWidget(&buttonBox);
+
+            // 5. Apply the math asynchronously when they hit OK
+            connect(&buttonBox, &QDialogButtonBox::accepted, this, [this, &dialog, filterCombo, sizeSpin, sigmaSpin, intensitySpin, blendSpin, brightSpin, contrastSpin, row]()
+                    {
+                
+                // CRITICAL: Grab ALL values before the dialog closes and destroys the UI elements!
+                int filterType = filterCombo->currentIndex();
+                int size = sizeSpin->value();
+                float sigma = sigmaSpin->value();
+                float intensity = intensitySpin->value();
+                float blend = blendSpin->value();
+                float bright = brightSpin->value();
+                float contrast = contrastSpin->value();
+                
+                // Setup Progress Bar
+                QProgressDialog *progress = new QProgressDialog("Calculating Filter...", nullptr, 0, 0, this);
+                progress->setWindowModality(Qt::WindowModal);
+                progress->setAttribute(Qt::WA_DeleteOnClose);
+                progress->show();
+
+                QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
+                
+                connect(watcher, &QFutureWatcher<void>::finished, this, [this, progress, watcher]() {
+                    progress->close();
+                    watcher->deleteLater();
+                    
+                    LayerManager& manager = canvas->getLayerManager();
+                    manager.addDirtyRect(0, 0, manager.getWidth(), manager.getHeight());
+                    canvas->update(); 
+                });
+
+                // Fire off to Background Thread
+                QFuture<void> future = QtConcurrent::run([this, row, filterType, size, sigma, intensity, blend, bright, contrast]() {
+                    
+                    // Construct the correct filter based on the dropdown choice using a smart pointer
+                    std::unique_ptr<Filter> activeFilter;
+
+                    switch(filterType) {
+                        case 0: activeFilter = std::make_unique<GaussianBlurFilter>(size, sigma); break;
+                        case 1: activeFilter = std::make_unique<SharpenFilter>(intensity); break;
+                        case 2: activeFilter = std::make_unique<EdgeDetectionFilter>(intensity); break;
+                        case 3: activeFilter = std::make_unique<EmbossFilter>(intensity); break;
+                        case 4: activeFilter = std::make_unique<InvertFilter>(blend); break;
+                        case 5: activeFilter = std::make_unique<GrayscaleFilter>(blend); break;
+                        case 6: activeFilter = std::make_unique<BrightnessContrastFilter>(bright, contrast); break;
+                    }
+
+                    // Apply the math to the layer memory safely
+                    if (activeFilter) {
+                        activeFilter->apply(this->canvas->getLayerManager().getLayers()[row].get());
+                    }
+                });
+
+                watcher->setFuture(future);
+                dialog.accept(); });
+
+            connect(&buttonBox, &QDialogButtonBox::rejected, this, [&dialog]()
+                    { dialog.reject(); });
+
+            dialog.exec();
+        } });
+    // Saving and Loading
+    // ==========================================
+    // SAVE NATIVE PROJECT (Ctrl+S)
+    // ==========================================
+    QShortcut *saveShortcut = new QShortcut(QKeySequence::Save, this);
+    connect(saveShortcut, &QShortcut::activated, this, [this]()
+            {
         QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/untitled.ptproj";
         QString filePath = QFileDialog::getSaveFileName(this, "Save Project", defaultPath, "Paint Project (*.ptproj)");
 
@@ -255,12 +412,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             }
         } });
 
-        // ==========================================
-        // LOAD NATIVE PROJECT (Ctrl+O)
-        // ==========================================
-        QShortcut *openShortcut = new QShortcut(QKeySequence::Open, this);
-        connect(openShortcut, &QShortcut::activated, this, [this]()
-                {
+    // ==========================================
+    // LOAD NATIVE PROJECT (Ctrl+O)
+    // ==========================================
+    QShortcut *openShortcut = new QShortcut(QKeySequence::Open, this);
+    connect(openShortcut, &QShortcut::activated, this, [this]()
+            {
         QString filePath = QFileDialog::getOpenFileName(this, "Open Project", "", "Paint Project (*.ptproj)");
 
         if (!filePath.isEmpty()) {
@@ -272,9 +429,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             }
         } });
 
-        // Note the captured variables in the brackets: [this, layerList, createLayerItem]
-        connect(canvas, &Canvas::coreLayerListChanged, this, [this, layerList, createLayerItem]()
-                {
+    // Note the captured variables in the brackets: [this, layerList, createLayerItem]
+    connect(canvas, &Canvas::coreLayerListChanged, this, [this, layerList, createLayerItem]()
+            {
             // 1. Temporarily block signals so clearing the list doesn't trigger active layer changes
             layerList->blockSignals(true);
             
@@ -301,5 +458,5 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             // 6. Unblock signals so the user can click on layers again
             layerList->blockSignals(false); });
 
-        adjustSize();
+    adjustSize();
 }

@@ -10,6 +10,7 @@
 #include <string>
 #include <memory>
 #include <unordered_set>
+#include "Filter.h"
 
 class LayerManager
 {
@@ -52,6 +53,7 @@ public:
 
     void setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
     void getPixel(int x, int y, uint8_t &r, uint8_t &g, uint8_t &b, uint8_t &a) const;
+    void applyFilter(Filter &filter); // Add this public method
 
     // Caching batching
     void beginBatch();
