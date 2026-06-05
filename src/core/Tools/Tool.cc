@@ -3,6 +3,13 @@
 #include <cmath>
 // for round
 
+void ColorPickerTool::onPress(int x, int y, LayerManager &manager)
+{
+    uint8_t r, g, b, a;
+    manager.getPixel(x, y, r, g, b, a);
+    manager.setToolColor(r, g, b, a);
+}
+
 // ==========================================
 // STROKE TOOL (Base Class Boilerplate)
 // ==========================================
@@ -143,6 +150,16 @@ void EraserTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &m
 void EraserTool::drawHoverCursor(int x, int y, LayerManager &manager)
 {
     CircleOutline(x, y, size, 255, 0, 0, 255).draw(manager, &LayerManager::setPreviewPixel); // Red!
+}
+
+void SprayTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
+{
+    SprayShape(x1, y1, r, g, b, a, size, 0.5).draw(manager);
+}
+
+void SprayTool::drawHoverCursor(int x, int y, LayerManager &manager)
+{
+    CircleOutline(x, y, size, 50, 50, 50, 255).draw(manager, &LayerManager::setPreviewPixel);
 }
 
 // ==========================================

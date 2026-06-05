@@ -84,6 +84,12 @@ private:
     }
 };
 
+class ColorPickerTool : public Tool
+{
+public:
+    void onPress(int x, int y, LayerManager &manager) override;
+};
+
 // ==========================================
 // 2. THE SHAPE ARCHETYPE
 // ==========================================
@@ -115,6 +121,13 @@ protected:
 };
 
 class EraserTool : public StrokeTool
+{
+protected:
+    void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) override;
+    void drawHoverCursor(int x, int y, LayerManager &manager) override;
+};
+
+class SprayTool : public StrokeTool
 {
 protected:
     void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) override;

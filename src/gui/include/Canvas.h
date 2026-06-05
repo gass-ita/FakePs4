@@ -18,33 +18,18 @@ public:
     explicit Canvas(QWidget *parent = nullptr);
     void onRegionChanged(int x, int y, int width, int height) override;
     void onLayerListChanged() override { emit coreLayerListChanged(); };
-    void setTool(std::shared_ptr<Tool> newTool)
+    void OnColorChange(int r, int g, int b, int a) override { emit coreColorChanged(r, g, b, a); };
+    void setTool(std::unique_ptr<Tool> newTool)
     {
-        currentTool = newTool;
-        if (currentTool)
-        {
-            currentTool->setSize(currentToolSize);
-            currentTool->setColor(r, g, b, a);
-        }
+        layerManager.setActiveTool(std::move(newTool));
     }
     void setToolSize(int newSize)
     {
-        currentToolSize = newSize;
-        if (currentTool)
-        {
-            currentTool->setSize(newSize);
-        }
+        layerManager.setToolSize(newSize);
     }
     void setToolColor(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = 255)
     {
-        r = red;
-        g = green;
-        b = blue;
-        a = alpha;
-        if (currentTool)
-        {
-            currentTool->setColor(r, g, b, a);
-        }
+        layerManager.setToolColor(red, green, blue, alpha);
     }
     void setLayerOpacity(int index, int opacityPercentage)
     {
@@ -70,13 +55,11 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
 
 private:
-    int currentToolSize = 5;
     LayerManager layerManager;
-    std::shared_ptr<Tool> currentTool;
+
     std::vector<uint8_t> frameBuffer;
 
     QPoint lastPos;
-    uint8_t r = 0, g = 0, b = 0, a = 255; // active color (default black)
 
     float zoom = 1.0f;
     QPointF panOffset = QPointF(0, 0);
@@ -90,6 +73,7 @@ private:
 signals:
     // 2. Define a Qt signal to shout to the rest of the app
     void coreLayerListChanged();
+    void coreColorChanged(int r, int g, int b, int a);
 };
 
 #endif // CANVAS_H

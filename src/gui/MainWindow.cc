@@ -39,6 +39,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // Add Tools
     QAction *brushAction = toolbar->addAction("Brush");
     QAction *eraserAction = toolbar->addAction("Eraser");
+    QAction *sprayAction = toolbar->addAction("Spray");
+    QAction *cPickerAction = toolbar->addAction("Color Picker");
     QAction *rectAction = toolbar->addAction("Rectangle");
     QAction *ellipseAction = toolbar->addAction("Ellipse");
     QAction *fillAction = toolbar->addAction("Fill");
@@ -95,23 +97,28 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // CONNECTIONS
     // ==========================================
     connect(brushAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_shared<BrushTool>()); });
+            { canvas->setTool(std::make_unique<BrushTool>()); });
 
     connect(eraserAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_shared<EraserTool>()); });
+            { canvas->setTool(std::make_unique<EraserTool>()); });
+
+    connect(sprayAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<SprayTool>()); });
+    connect(cPickerAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<ColorPickerTool>()); });
 
     connect(rectAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_shared<RectangleTool>()); });
+            { canvas->setTool(std::make_unique<RectangleTool>()); });
 
     // When the slider moves, tell the Canvas to update the tool size
     connect(sizeSlider, &QSlider::valueChanged, this, [this](int value)
             { canvas->setToolSize(value); });
     connect(ellipseAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_shared<EllipseTool>()); });
+            { canvas->setTool(std::make_unique<EllipseTool>()); });
     connect(fillAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_shared<FillTool>()); });
+            { canvas->setTool(std::make_unique<FillTool>()); });
     // Set the default tool to Brush
-    canvas->setTool(std::make_shared<BrushTool>());
+    canvas->setTool(std::make_unique<BrushTool>());
 
     // Wire up the Color Picker
     connect(colorAction, &QAction::triggered, this, [this, colorAction]()
@@ -457,6 +464,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             
             // 6. Unblock signals so the user can click on layers again
             layerList->blockSignals(false); });
+
+    connect(canvas, &Canvas::coreColorChanged, this, [this, colorAction](int r, int g, int b, int a)
+            {
+                QPixmap pixmap(24, 24);
+                
+                // 2. Fill with white first so semi-transparent colors are actually visible
+                pixmap.fill(Qt::white); 
+                
+                // 3. Paint the new color over the top
+                QPainter painter(&pixmap);
+                painter.fillRect(pixmap.rect(), QColor(r, g, b, a));
+                
+                // 4. THIS is the missing line! Update the actual toolbar icon.
+                colorAction->setIcon(QIcon(pixmap)); });
 
     adjustSize();
 }

@@ -1,6 +1,7 @@
 #include "LayerManager.h"
 #include <algorithm>
 #include <iostream>
+#include "Tool.h"
 
 LayerManager::LayerManager(int width, int height)
     : width(width), height(height)
@@ -353,6 +354,48 @@ void LayerManager::setLayerOpacity(size_t index, float opacity)
         return;
     layers[index]->opacity = opacity;
     markRegionDirty(0, 0, getWidth(), getHeight());
+}
+
+void LayerManager::setActiveTool(std::unique_ptr<Tool> tool)
+{
+    activeTool = std::move(tool);
+    if (activeTool)
+    {
+        activeTool->setSize(currentToolSize);
+        activeTool->setColor(r, g, b, a);
+    }
+}
+
+Tool *LayerManager::getActiveTool()
+{
+    return activeTool.get();
+}
+
+void LayerManager::setToolColor(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
+{
+    r = red;
+    g = green;
+    b = blue;
+    a = alpha;
+
+    if (activeTool)
+    {
+        activeTool->setColor(red, green, blue, alpha);
+    }
+
+    for (auto *observer : observers)
+    {
+        observer->OnColorChange(red, green, blue, alpha);
+    }
+}
+
+void LayerManager::setToolSize(int newSize)
+{
+    currentToolSize = newSize;
+    if (activeTool)
+    {
+        activeTool->setSize(newSize);
+    }
 }
 
 // --- PREVIEW LOGIC ---

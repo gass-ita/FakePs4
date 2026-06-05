@@ -11,6 +11,7 @@ public:
     // We pass the bounding box of the changes, not the pixels themselves.
     virtual void onRegionChanged(int x, int y, int width, int height) = 0;
     virtual void onLayerListChanged() = 0;
+    virtual void OnColorChange(int r, int g, int b, int a) = 0;
 };
 
 #endif // LM_OBSERVER_H

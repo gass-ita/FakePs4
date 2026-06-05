@@ -27,6 +27,19 @@ public:
     void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
 };
 
+class SprayShape : public Shape
+{
+private:
+    int xc, yc;
+    uint8_t r, g, b, a;
+    int size;
+    float density;
+
+public:
+    SprayShape(int xc, int yc, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int size = 10, float density = 1.0f);
+    virtual void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
+};
+
 // composite shape
 class ShapeGroup : public Shape
 {

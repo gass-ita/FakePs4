@@ -11,7 +11,10 @@ Canvas::Canvas(QWidget *parent)
     layerManager.addObserver(this);
     setMouseTracking(true); // Enable mouse move events even when no buttons are pressed
 
-    currentTool = std::make_shared<BrushTool>();
+    // set the layer manager's tool to a default brush so we have a valid tool to call on hover before the user selects one
+    layerManager.setActiveTool(std::make_unique<BrushTool>());
+    layerManager.setToolSize(5);
+    layerManager.setToolColor(255, 0, 0, 255);
 
     panOffset = QPointF(100, 100); // Start with a pan offset to center the canvas
 }
@@ -75,10 +78,10 @@ void Canvas::mousePressEvent(QMouseEvent *event)
         setCursor(Qt::ClosedHandCursor); // Visual feedback
     }
     // Left Mouse Button -> Pass to Tool
-    else if (event->button() == Qt::LeftButton && currentTool)
+    else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
         QPoint imgPos = screenToImage(event->pos());
-        currentTool->onPress(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.getActiveTool()->onPress(imgPos.x(), imgPos.y(), layerManager);
     }
 }
 
@@ -94,16 +97,16 @@ void Canvas::mouseMoveEvent(QMouseEvent *event)
         update(); // Request a full screen redraw to move the image
     }
     // If drawing
-    else if ((event->buttons() & Qt::LeftButton) && currentTool)
+    else if ((event->buttons() & Qt::LeftButton) && layerManager.getActiveTool())
     {
 
-        currentTool->onMove(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.getActiveTool()->onMove(imgPos.x(), imgPos.y(), layerManager);
     }
 
     // Always update the hover preview (even if no buttons are pressed)
-    if (currentTool)
+    if (layerManager.getActiveTool())
     {
-        currentTool->onHover(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.getActiveTool()->onHover(imgPos.x(), imgPos.y(), layerManager);
     }
 }
 
@@ -114,10 +117,10 @@ void Canvas::mouseReleaseEvent(QMouseEvent *event)
         isPanning = false;
         unsetCursor();
     }
-    else if (event->button() == Qt::LeftButton && currentTool)
+    else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
         QPoint imgPos = screenToImage(event->pos());
-        currentTool->onRelease(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.getActiveTool()->onRelease(imgPos.x(), imgPos.y(), layerManager);
     }
 }
 

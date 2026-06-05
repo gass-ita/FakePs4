@@ -12,6 +12,8 @@
 #include <unordered_set>
 #include "Filter.h"
 
+class Tool; // Forward declaration to avoid circular dependency
+
 class LayerManager
 {
 public:
@@ -32,6 +34,11 @@ private:
     std::vector<uint8_t> projectionCache;
     int tilesX, tilesY;
     std::unordered_set<int> dirtyTiles;
+
+    // tool settings
+    uint8_t r = 0, g = 0, b = 0, a = 255;
+    int currentToolSize = 1;
+    std::unique_ptr<Tool> activeTool;
 
     // preview logic
     std::shared_ptr<ColorLayer> previewLayer;
@@ -69,6 +76,12 @@ public:
     void setLayerVisibility(size_t index, bool visible);
     void setLayerName(size_t index, const std::string &name);
     void setLayerOpacity(size_t index, float opacity); // opacity as a float between 0.0 and 1.0
+
+    void setActiveTool(std::unique_ptr<Tool> tool);
+
+    Tool *getActiveTool();
+    void setToolColor(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = 255);
+    void setToolSize(int newSize);
 
     // preview logic
     void clearPreview();

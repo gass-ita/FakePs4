@@ -228,3 +228,20 @@ void CircleOutline::draw(LayerManager &manager, PixelSetter setter) const
         }
     }
 }
+
+SprayShape::SprayShape(int xc, int yc, uint8_t r, uint8_t g, uint8_t b, uint8_t a, int size, float density) : xc(xc), yc(yc), r(r), g(g), b(b), a(a), size(size), density(density) {}
+
+void SprayShape::draw(LayerManager &manager, PixelSetter setter) const
+{
+    // generate 2 random numbers a radius and an angle
+    for (int i = 0; i < size * density; ++i) // number of dots is proportional to size
+    {
+        float radius = static_cast<float>(rand()) / RAND_MAX * size;
+        float angle = static_cast<float>(rand()) / RAND_MAX * 6.2831853f; // 0 to 2PI
+
+        int px = xc + static_cast<int>(radius * std::cos(angle));
+        int py = yc + static_cast<int>(radius * std::sin(angle));
+
+        (manager.*setter)(px, py, r, g, b, a);
+    }
+}
