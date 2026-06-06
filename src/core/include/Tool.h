@@ -134,7 +134,7 @@ private:
 public:
     // rate: How fast it grows per pixel dragged
     // factor: The final maximum size multiplier (2.0 = double the UI size)
-    ConeBrushTool(float rate = 0.05f, float factor = 2.0f);
+    ConeBrushTool(float rate = 0.05f, float factor = 1.0f);
 
     void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
     void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;

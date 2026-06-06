@@ -26,6 +26,8 @@
 #include <QStackedWidget>
 #include <QFormLayout>
 #include <QFutureWatcher>
+#include <QToolButton>
+#include <QMenuBar>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
@@ -36,18 +38,48 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
     QToolBar *toolbar = addToolBar("Tools");
 
-    // Add Tools
-    QAction *brushAction = toolbar->addAction("Brush");
+    // ==========================================
+    // 1. BRUSH DROPDOWN
+    // ==========================================
+    QToolButton *brushButton = new QToolButton(this);
+    brushButton->setText("Brushes");
+    brushButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu *brushMenu = new QMenu(brushButton);
+
+    QAction *brushAction = brushMenu->addAction("Standard Brush");
+    QAction *pressureBrushAction = brushMenu->addAction("Pressure Brush");
+    QAction *coneAction = brushMenu->addAction("Cone Brush");
+    QAction *sprayAction = brushMenu->addAction("Spray");
+
+    brushButton->setMenu(brushMenu);
+    toolbar->addWidget(brushButton);
+
+    // ==========================================
+    // 2. STANDALONE TOOLS
+    // ==========================================
     QAction *eraserAction = toolbar->addAction("Eraser");
-    QAction *coneAction = toolbar->addAction("Cone");
-    QAction *sprayAction = toolbar->addAction("Spray");
-    QAction *cPickerAction = toolbar->addAction("Color Picker");
-    QAction *rectAction = toolbar->addAction("Rectangle");
-    QAction *ellipseAction = toolbar->addAction("Ellipse");
     QAction *fillAction = toolbar->addAction("Fill");
+    QAction *cPickerAction = toolbar->addAction("Color Picker");
+
+    // ==========================================
+    // 3. SHAPE DROPDOWN
+    // ==========================================
+    QToolButton *shapeButton = new QToolButton(this);
+    shapeButton->setText("Shapes");
+    shapeButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu *shapeMenu = new QMenu(shapeButton);
+
+    QAction *rectAction = shapeMenu->addAction("Rectangle");
+    QAction *ellipseAction = shapeMenu->addAction("Ellipse");
+
+    shapeButton->setMenu(shapeMenu);
+    toolbar->addWidget(shapeButton);
 
     toolbar->addSeparator(); // Add a nice visual line
 
+    // ==========================================
+    // 4. COLOR & SIZE
+    // ==========================================
     QPixmap colorPixmap(24, 24);
     colorPixmap.fill(Qt::red);
 
@@ -64,6 +96,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     sizeSlider->setFixedWidth(150);
     toolbar->addWidget(sizeSlider);
 
+    // ==========================================
+    // LAYERS DOCK
+    // ==========================================
     QDockWidget *layerDock = new QDockWidget("Layers", this);
     layerDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
@@ -77,9 +112,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     auto createLayerItem = [](const QString &name)
     {
         QListWidgetItem *item = new QListWidgetItem(name);
-        // Enable selection, double-click editing, and checkboxes
         item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsUserCheckable);
-        item->setCheckState(Qt::Checked); // Visible by default
+        item->setCheckState(Qt::Checked);
         return item;
     };
 
@@ -97,30 +131,34 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // ==========================================
     // CONNECTIONS
     // ==========================================
+
+    // Brushes
     connect(brushAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<BrushTool>()); }); // Assuming you have a standard BrushTool class
+    connect(pressureBrushAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<PressureBrushTool>()); });
-
-    connect(eraserAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<EraserTool>()); });
-
     connect(coneAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<ConeBrushTool>()); });
-
     connect(sprayAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<SprayTool>()); });
+
+    // Shapes
+    connect(rectAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<RectangleTool>()); });
+    connect(ellipseAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<EllipseTool>()); });
+
+    // Standalone Tools
+    connect(eraserAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<EraserTool>()); });
+    connect(fillAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<FillTool>()); });
     connect(cPickerAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<ColorPickerTool>()); });
 
-    connect(rectAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<RectangleTool>()); });
-
-    // When the slider moves, tell the Canvas to update the tool size
+    // Sliders
     connect(sizeSlider, &QSlider::valueChanged, this, [this](int value)
             { canvas->setToolSize(value); });
-    connect(ellipseAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<EllipseTool>()); });
-    connect(fillAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<FillTool>()); });
 
     // Wire up the Color Picker
     connect(colorAction, &QAction::triggered, this, [this, colorAction]()
