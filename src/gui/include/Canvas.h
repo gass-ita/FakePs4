@@ -48,6 +48,7 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
     // Mouse Events for drawing
+    void tabletEvent(QTabletEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;

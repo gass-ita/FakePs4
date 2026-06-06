@@ -98,7 +98,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // CONNECTIONS
     // ==========================================
     connect(brushAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<BrushTool>()); });
+            { canvas->setTool(std::make_unique<PressureBrushTool>()); });
 
     connect(eraserAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<EraserTool>()); });
@@ -121,8 +121,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             { canvas->setTool(std::make_unique<EllipseTool>()); });
     connect(fillAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<FillTool>()); });
-    // Set the default tool to Brush
-    canvas->setTool(std::make_unique<BrushTool>());
+
     // Wire up the Color Picker
     connect(colorAction, &QAction::triggered, this, [this, colorAction]()
             {

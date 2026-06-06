@@ -3,7 +3,7 @@
 #include <cmath>
 // for round
 
-void ColorPickerTool::onPress(int x, int y, LayerManager &manager)
+void ColorPickerTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     uint8_t r, g, b, a;
     manager.getPixel(x, y, r, g, b, a);
@@ -13,7 +13,7 @@ void ColorPickerTool::onPress(int x, int y, LayerManager &manager)
 // ==========================================
 // STROKE TOOL (Base Class Boilerplate)
 // ==========================================
-void StrokeTool::onPress(int x, int y, LayerManager &manager)
+void StrokeTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     manager.clearPreview();
     isDrawing = true;
@@ -36,7 +36,7 @@ void StrokeTool::onPress(int x, int y, LayerManager &manager)
     manager.endBatch();
 }
 
-void StrokeTool::onMove(int x, int y, LayerManager &manager)
+void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     if (!isDrawing)
         return;
@@ -123,7 +123,7 @@ void StrokeTool::onMove(int x, int y, LayerManager &manager)
     lastY = currentY;
 }
 
-void StrokeTool::onRelease(int x, int y, LayerManager &manager)
+void StrokeTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     isDrawing = false;
 }
@@ -174,7 +174,7 @@ void SprayTool::drawHoverCursor(int x, int y, LayerManager &manager)
 // ==========================================
 // SHAPE TOOL (Base Class Boilerplate)
 // ==========================================
-void ShapeTool::onPress(int x, int y, LayerManager &manager)
+void ShapeTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     manager.clearPreview();
     startX = x;
@@ -182,7 +182,7 @@ void ShapeTool::onPress(int x, int y, LayerManager &manager)
     isDrawing = true;
 }
 
-void ShapeTool::onMove(int x, int y, LayerManager &manager)
+void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     if (!isDrawing)
         return;
@@ -192,7 +192,7 @@ void ShapeTool::onMove(int x, int y, LayerManager &manager)
     manager.showPreview();
 }
 
-void ShapeTool::onRelease(int x, int y, LayerManager &manager)
+void ShapeTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     if (!isDrawing)
         return;
@@ -314,7 +314,7 @@ void EllipseTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &m
 // ==========================================
 // FILL TOOL (Scanline Span Algorithm)
 // ==========================================
-void FillTool::onPress(int x, int y, LayerManager &manager)
+void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     manager.clearPreview();
 
@@ -431,7 +431,7 @@ void FillTool::onPress(int x, int y, LayerManager &manager)
 ConeBrushTool::ConeBrushTool(float rate, float factor)
     : growthRate(rate), growthFactor(factor), calculatedMaxSize(0.0f), originalBaseSize(5) {}
 
-void ConeBrushTool::onPress(int x, int y, LayerManager &manager)
+void ConeBrushTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     // 1. Save the actual UI slider size
     originalBaseSize = size;
@@ -450,10 +450,10 @@ void ConeBrushTool::onPress(int x, int y, LayerManager &manager)
     rawLastY = y;
 
     // 6. Draw the first dot
-    BrushTool::onPress(x, y, manager);
+    BrushTool::onPress(x, y, pressure, tiltX, tiltY, manager);
 }
 
-void ConeBrushTool::onMove(int x, int y, LayerManager &manager)
+void ConeBrushTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     if (!isDrawing)
         return;
@@ -475,13 +475,54 @@ void ConeBrushTool::onMove(int x, int y, LayerManager &manager)
     rawLastY = y;
 
     // 6. Draw the curve
-    BrushTool::onMove(x, y, manager);
+    BrushTool::onMove(x, y, pressure, tiltX, tiltY, manager);
 }
 
-void ConeBrushTool::onRelease(int x, int y, LayerManager &manager)
+void ConeBrushTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
-    BrushTool::onRelease(x, y, manager);
+    BrushTool::onRelease(x, y, pressure, tiltX, tiltY, manager);
 
     // SNAP BACK! Restore the original UI size so the hover cursor isn't permanently massive.
+    size = originalBaseSize;
+}
+
+// ==========================================
+// PRESSURE BRUSH TOOL
+// ==========================================
+
+PressureBrushTool::PressureBrushTool() : originalBaseSize(5) {}
+
+void PressureBrushTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+{
+    // 1. Lock in the size that the UI slider is currently set to
+    originalBaseSize = size;
+
+    // 2. Scale the size by the physical pressure (0.0 to 1.0)
+    // Example: UI size is 50. Pressure is 0.5 (half). Brush becomes 25px.
+    size = std::max(1, static_cast<int>(originalBaseSize * pressure));
+
+    // 3. Let the base class draw the initial dot using this new temporary size
+    BrushTool::onPress(x, y, pressure, tiltX, tiltY, manager);
+}
+
+void PressureBrushTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+{
+    if (!isDrawing)
+        return;
+
+    // 1. Continually update the size based on how hard they are pressing right now
+    size = std::max(1, static_cast<int>(originalBaseSize * pressure));
+
+    // 2. Pass control down to the StrokeTool Bezier math to draw the curve segments
+    BrushTool::onMove(x, y, pressure, tiltX, tiltY, manager);
+}
+
+void PressureBrushTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+{
+    // 1. Finish the stroke
+    BrushTool::onRelease(x, y, pressure, tiltX, tiltY, manager);
+
+    // 2. SNAP BACK! Restore the original UI size.
+    // This ensures your UI slider stays accurate and the hover cursor goes back to normal.
     size = originalBaseSize;
 }

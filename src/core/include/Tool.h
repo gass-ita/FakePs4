@@ -23,9 +23,9 @@ public:
         a = alpha;
     }
 
-    virtual void onPress(int x, int y, LayerManager &manager) {}
-    virtual void onMove(int x, int y, LayerManager &manager) {}
-    virtual void onRelease(int x, int y, LayerManager &manager) {}
+    virtual void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) {}
+    virtual void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) {}
+    virtual void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) {}
     virtual void onHover(int x, int y, LayerManager &manager) {}
 };
 
@@ -71,9 +71,9 @@ protected:
     virtual void drawHoverCursor(int x, int y, LayerManager &manager) = 0;
 
 public:
-    void onPress(int x, int y, LayerManager &manager) override;
-    void onMove(int x, int y, LayerManager &manager) override;
-    void onRelease(int x, int y, LayerManager &manager) override;
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
     void onHover(int x, int y, LayerManager &manager) override;
 
 private:
@@ -87,7 +87,7 @@ private:
 class ColorPickerTool : public Tool
 {
 public:
-    void onPress(int x, int y, LayerManager &manager) override;
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
 };
 
 // ==========================================
@@ -105,9 +105,9 @@ protected:
     virtual void drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;
 
 public:
-    void onPress(int x, int y, LayerManager &manager) override;
-    void onMove(int x, int y, LayerManager &manager) override;
-    void onRelease(int x, int y, LayerManager &manager) override;
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
 };
 
 // ==========================================
@@ -136,9 +136,22 @@ public:
     // factor: The final maximum size multiplier (2.0 = double the UI size)
     ConeBrushTool(float rate = 0.05f, float factor = 2.0f);
 
-    void onPress(int x, int y, LayerManager &manager) override;
-    void onMove(int x, int y, LayerManager &manager) override;
-    void onRelease(int x, int y, LayerManager &manager) override;
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+};
+
+class PressureBrushTool : public BrushTool
+{
+private:
+    int originalBaseSize;
+
+public:
+    PressureBrushTool();
+
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
 };
 class EraserTool : public StrokeTool
 {
@@ -171,11 +184,11 @@ protected:
 class FillTool : public Tool
 {
 public:
-    void onPress(int x, int y, LayerManager &manager) override;
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
 
     // We leave Move, Release, and Hover completely blank for the Fill tool
-    void onMove(int x, int y, LayerManager &manager) override {}
-    void onRelease(int x, int y, LayerManager &manager) override {}
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override {}
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override {}
     void onHover(int x, int y, LayerManager &manager) override
     {
         manager.clearPreview(); // Just wipe any previous cursors

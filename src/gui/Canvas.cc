@@ -12,7 +12,7 @@ Canvas::Canvas(QWidget *parent)
     setMouseTracking(true); // Enable mouse move events even when no buttons are pressed
 
     // set the layer manager's tool to a default brush so we have a valid tool to call on hover before the user selects one
-    layerManager.setActiveTool(std::make_unique<BrushTool>());
+    layerManager.setActiveTool(std::make_unique<PressureBrushTool>());
     layerManager.setToolSize(5);
     layerManager.setToolColor(255, 0, 0, 255);
 
@@ -68,6 +68,39 @@ void Canvas::onRegionChanged(int x, int y, int w, int h)
 // INTERACTION (Panning and Drawing)
 // ==========================================
 
+void Canvas::tabletEvent(QTabletEvent *event)
+{
+    // Qt6 uses position().toPoint(). If using Qt5, use pos()
+    QPoint imgPos = screenToImage(event->position().toPoint());
+
+    float pressure = event->pressure(); // 0.0 to 1.0
+    float tiltX = event->xTilt();       // -60 to 60 degrees
+    float tiltY = event->yTilt();       // -60 to 60 degrees
+
+    Tool *activeTool = layerManager.getActiveTool();
+    if (!activeTool)
+        return;
+
+    if (event->type() == QEvent::TabletPress)
+    {
+        activeTool->onPress(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
+        update();
+    }
+    else if (event->type() == QEvent::TabletMove)
+    {
+        activeTool->onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
+        update();
+    }
+    else if (event->type() == QEvent::TabletRelease)
+    {
+        activeTool->onRelease(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
+        update();
+    }
+
+    // Accept the event so Qt knows we handled it and doesn't fire a duplicate mouse event!
+    event->accept();
+}
+
 void Canvas::mousePressEvent(QMouseEvent *event)
 {
     // Middle Mouse Button -> Start Panning
@@ -81,7 +114,7 @@ void Canvas::mousePressEvent(QMouseEvent *event)
     else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
         QPoint imgPos = screenToImage(event->pos());
-        layerManager.getActiveTool()->onPress(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.getActiveTool()->onPress(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f, layerManager);
     }
 }
 
@@ -100,7 +133,7 @@ void Canvas::mouseMoveEvent(QMouseEvent *event)
     else if ((event->buttons() & Qt::LeftButton) && layerManager.getActiveTool())
     {
 
-        layerManager.getActiveTool()->onMove(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.getActiveTool()->onMove(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f, layerManager);
     }
 
     // Always update the hover preview (even if no buttons are pressed)
@@ -120,7 +153,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent *event)
     else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
         QPoint imgPos = screenToImage(event->pos());
-        layerManager.getActiveTool()->onRelease(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.getActiveTool()->onRelease(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f, layerManager);
     }
 }
 
