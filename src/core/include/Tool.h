@@ -120,6 +120,26 @@ protected:
     void drawHoverCursor(int x, int y, LayerManager &manager) override;
 };
 
+class ConeBrushTool : public BrushTool
+{
+private:
+    float currentDynamicSize = 1.0f;
+    float growthRate;
+    float growthFactor;      // The multiplier (e.g., 2.0x)
+    float calculatedMaxSize; // We will calculate this when the user clicks!
+    int originalBaseSize;
+    int rawLastX = 0;
+    int rawLastY = 0;
+
+public:
+    // rate: How fast it grows per pixel dragged
+    // factor: The final maximum size multiplier (2.0 = double the UI size)
+    ConeBrushTool(float rate = 0.05f, float factor = 2.0f);
+
+    void onPress(int x, int y, LayerManager &manager) override;
+    void onMove(int x, int y, LayerManager &manager) override;
+    void onRelease(int x, int y, LayerManager &manager) override;
+};
 class EraserTool : public StrokeTool
 {
 protected:

@@ -38,63 +38,62 @@ void Line::draw(LayerManager &manager, PixelSetter setter) const
     }
     else
     {
-        // Professional Step-Stamping for thick lines
+        // ==========================================
+        // PRO SOFTWARE RENDERING (Zero Overdraw)
+        // ==========================================
         int radius = thickness / 2;
-        int radiusSquared = radius * radius;
+        float radiusSquared = static_cast<float>(radius * radius);
 
-        // 25% spacing for a smooth edge without burning CPU
-        float spacing = std::max(1.0f, radius * 0.25f);
-        float distSinceLastStamp = spacing; // Start ready to stamp immediately
+        // 1. Calculate the bounding box of the entire capsule shape
+        int minX = std::min(x0, x1) - radius;
+        int maxX = std::max(x0, x1) + radius;
+        int minY = std::min(y0, y1) - radius;
+        int maxY = std::max(y0, y1) + radius;
 
-        // Helper lambda to stamp a solid circle at a given center coordinate
-        auto stampCircle = [&](int cx_center, int cy_center)
+        // Pre-calculate line segment vector lengths for math speed
+        float dx_line = static_cast<float>(x1 - x0);
+        float dy_line = static_cast<float>(y1 - y0);
+        float lineLengthSquared = dx_line * dx_line + dy_line * dy_line;
+
+        // 2. Iterate through the bounding box EXACTLY ONCE
+        for (int y = minY; y <= maxY; ++y)
         {
-            for (int cy = -radius; cy <= radius; cy++)
+            for (int x = minX; x <= maxX; ++x)
             {
-                for (int cx = -radius; cx <= radius; cx++)
+                float distSquared;
+
+                if (lineLengthSquared == 0.0f)
                 {
-                    if (cx * cx + cy * cy <= radiusSquared)
-                    {
-                        (manager.*setter)(cx_center + cx, cy_center + cy, r, g, b, a);
-                    }
+                    // The line is just a single dot (user clicked without dragging)
+                    float dx_pt = static_cast<float>(x - x0);
+                    float dy_pt = static_cast<float>(y - y0);
+                    distSquared = dx_pt * dx_pt + dy_pt * dy_pt;
+                }
+                else
+                {
+                    // Calculate 't' (a percentage from 0.0 to 1.0 along the segment)
+                    float t = ((x - x0) * dx_line + (y - y0) * dy_line) / lineLengthSquared;
+
+                    // Clamp 't' so we get perfectly rounded caps at the ends!
+                    t = std::max(0.0f, std::min(1.0f, t));
+
+                    // Find the exact closest point on the core line segment
+                    float closestX = x0 + t * dx_line;
+                    float closestY = y0 + t * dy_line;
+
+                    // Check distance from current pixel to that closest point
+                    float dx_pt = static_cast<float>(x) - closestX;
+                    float dy_pt = static_cast<float>(y) - closestY;
+                    distSquared = dx_pt * dx_pt + dy_pt * dy_pt;
+                }
+
+                // 3. If within radius, draw it!
+                if (distSquared <= radiusSquared)
+                {
+                    (manager.*setter)(x, y, r, g, b, a);
                 }
             }
-        };
-
-        // Main line traversal loop
-        while (true)
-        {
-            if (distSinceLastStamp >= spacing)
-            {
-                stampCircle(x_curr, y_curr);
-                distSinceLastStamp = 0.0f; // Reset counter
-            }
-
-            if (x_curr == x1 && y_curr == y1)
-                break;
-
-            e2 = 2 * err;
-            bool steppedX = false, steppedY = false;
-
-            if (e2 >= dy)
-            {
-                err += dy;
-                x_curr += sx;
-                steppedX = true;
-            }
-            if (e2 <= dx)
-            {
-                err += dx;
-                y_curr += sy;
-                steppedY = true;
-            }
-
-            // Add actual distance moved (~1.414 for diagonal, 1.0 for straight)
-            distSinceLastStamp += (steppedX && steppedY) ? 1.414f : 1.0f;
         }
-
-        // CRITICAL: Always stamp the final cap to ensure the line ends perfectly round
-        stampCircle(x1, y1);
     }
 }
 
@@ -236,7 +235,10 @@ void SprayShape::draw(LayerManager &manager, PixelSetter setter) const
     // generate 2 random numbers a radius and an angle
     for (int i = 0; i < size * density; ++i) // number of dots is proportional to size
     {
-        float radius = static_cast<float>(rand()) / RAND_MAX * size;
+        // To produce a uniform distribution over the circle area,
+        // sample radius = sqrt(u) * size where u ~ U(0,1).
+        float u = static_cast<float>(rand()) / RAND_MAX;
+        float radius = std::sqrt(u) * size;
         float angle = static_cast<float>(rand()) / RAND_MAX * 6.2831853f; // 0 to 2PI
 
         int px = xc + static_cast<int>(radius * std::cos(angle));

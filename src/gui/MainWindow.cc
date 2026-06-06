@@ -39,6 +39,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // Add Tools
     QAction *brushAction = toolbar->addAction("Brush");
     QAction *eraserAction = toolbar->addAction("Eraser");
+    QAction *coneAction = toolbar->addAction("Cone");
     QAction *sprayAction = toolbar->addAction("Spray");
     QAction *cPickerAction = toolbar->addAction("Color Picker");
     QAction *rectAction = toolbar->addAction("Rectangle");
@@ -102,6 +103,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(eraserAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<EraserTool>()); });
 
+    connect(coneAction, &QAction::triggered, this, [this]()
+            { canvas->setTool(std::make_unique<ConeBrushTool>()); });
+
     connect(sprayAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<SprayTool>()); });
     connect(cPickerAction, &QAction::triggered, this, [this]()
@@ -119,7 +123,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             { canvas->setTool(std::make_unique<FillTool>()); });
     // Set the default tool to Brush
     canvas->setTool(std::make_unique<BrushTool>());
-
     // Wire up the Color Picker
     connect(colorAction, &QAction::triggered, this, [this, colorAction]()
             {

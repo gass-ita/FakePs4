@@ -76,7 +76,16 @@ void StrokeTool::onMove(int x, int y, LayerManager &manager)
     // 3. Distance calculation (still using float for std::sqrt, but casting result to int)
     float dist1 = std::sqrt(std::pow(lastX - startMidX, 2) + std::pow(lastY - startMidY, 2));
     float dist2 = std::sqrt(std::pow(endMidX - lastX, 2) + std::pow(endMidY - lastY, 2));
-    int steps = std::max(1, static_cast<int>(dist1 + dist2));
+    // ==========================================
+    // ADAPTIVE BEZIER STEPPING (The 10x Speedup)
+    // ==========================================
+    // Thin brushes need tight steps. Fat brushes can step massive distances
+    // because their huge rounded caps overlap and hide the gaps!
+    float stepDistance = std::max(1.0f, size * 0.15f);
+    stepDistance = std::min(stepDistance, 15.0f); // Cap it so sharp curves don't get blocky
+
+    int steps = std::max(1, static_cast<int>((dist1 + dist2) / stepDistance));
+    // ==========================================
 
     int minX = x, minY = y, maxX = x, maxY = y;
 
@@ -412,4 +421,67 @@ void FillTool::onPress(int x, int y, LayerManager &manager)
     // 6. Report the final, optimized bounding box to the Tile Cache and Undo System!
     manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
     manager.endBatch();
+}
+// ==========================================
+// CONE BRUSH TOOL
+// ==========================================
+
+// 1. Initialize the threshold in the constructor
+// 1. Initialize the rate and factor
+ConeBrushTool::ConeBrushTool(float rate, float factor)
+    : growthRate(rate), growthFactor(factor), calculatedMaxSize(0.0f), originalBaseSize(5) {}
+
+void ConeBrushTool::onPress(int x, int y, LayerManager &manager)
+{
+    // 1. Save the actual UI slider size
+    originalBaseSize = size;
+
+    // 2. Calculate the ceiling for this specific stroke! (e.g., 50 * 2.0 = 100)
+    calculatedMaxSize = static_cast<float>(originalBaseSize) * growthFactor;
+
+    // 3. Force the brush to start "really small" (1 pixel)
+    currentDynamicSize = 1.0f;
+
+    // 4. Temporarily override the base size so the very first dot is small
+    size = static_cast<int>(currentDynamicSize);
+
+    // 5. Track position
+    rawLastX = x;
+    rawLastY = y;
+
+    // 6. Draw the first dot
+    BrushTool::onPress(x, y, manager);
+}
+
+void ConeBrushTool::onMove(int x, int y, LayerManager &manager)
+{
+    if (!isDrawing)
+        return;
+
+    // 1. Calculate distance moved
+    float dist = std::sqrt(std::pow(x - rawLastX, 2) + std::pow(y - rawLastY, 2));
+
+    // 2. Grow the brush
+    currentDynamicSize += (dist * growthRate);
+
+    // 3. Clamp it using the dynamic ceiling we calculated in onPress!
+    currentDynamicSize = std::min(currentDynamicSize, calculatedMaxSize);
+
+    // 4. Override base size for the Bezier curves
+    size = static_cast<int>(currentDynamicSize);
+
+    // 5. Update tracking
+    rawLastX = x;
+    rawLastY = y;
+
+    // 6. Draw the curve
+    BrushTool::onMove(x, y, manager);
+}
+
+void ConeBrushTool::onRelease(int x, int y, LayerManager &manager)
+{
+    BrushTool::onRelease(x, y, manager);
+
+    // SNAP BACK! Restore the original UI size so the hover cursor isn't permanently massive.
+    size = originalBaseSize;
 }
