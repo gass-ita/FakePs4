@@ -5,12 +5,41 @@
 #include <deque>
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 
 class Tool
 {
+protected:
+    virtual bool requiresHighFrequency() const { return true; }
+    short int throttleMs = 16;        // lowfreq tools
+    short int highFreqThrottleMs = 8; // highfreq tools (like the brush) can skip throttling altogether for maximum responsiveness
+    std::chrono::steady_clock::time_point lastTime;
+
 public:
     int size = 5;
     uint8_t r = 0, g = 0, b = 0, a = 255;
+
+    Tool() : lastTime(std::chrono::steady_clock::now()) {}
+
+    // input throttling logic to prevent tools from overwhelming the CPU with too many updates (especially important for the Shape tool)
+    bool shouldProcessMove()
+    {
+
+        short _throttleMs = requiresHighFrequency() ? highFreqThrottleMs : throttleMs;
+        if (_throttleMs > 0)
+        {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
+
+            if (elapsed < _throttleMs)
+                return false;
+
+            lastTime = now;
+        }
+
+        // Update tracking and allow the move!
+        return true;
+    }
 
     virtual ~Tool() = default;
 
@@ -63,7 +92,7 @@ protected:
     int prevX = 0;
     int prevY = 0;
 
-    short int smoothingWindow = 12;
+    short int smoothingWindow = 6; // the higher the smoother but more delay
     std::deque<std::pair<int, int>> pointHistory;
 
     // Pure virtual functions that child classes MUST implement
@@ -103,7 +132,7 @@ protected:
     // Pure virtual functions that child classes MUST implement
     virtual void drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;
     virtual void drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;
-
+    virtual bool requiresHighFrequency() const override { return false; } // Shapes don't need high-frequency updates
 public:
     void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
     void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;

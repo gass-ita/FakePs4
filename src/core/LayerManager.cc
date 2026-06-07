@@ -38,6 +38,38 @@ void LayerManager::addObserver(LMObserver *observer)
     observers.push_back(observer);
 }
 
+void LayerManager::onMove(int x, int y, float pressure, float tiltX, float tiltY)
+{
+    if (activeTool)
+    {
+        activeTool->onMove(x, y, pressure, tiltX, tiltY, *this);
+    }
+}
+
+void LayerManager::onPress(int x, int y, float pressure, float tiltX, float tiltY)
+{
+    if (activeTool)
+    {
+        activeTool->onPress(x, y, pressure, tiltX, tiltY, *this);
+    }
+}
+
+void LayerManager::onRelease(int x, int y, float pressure, float tiltX, float tiltY)
+{
+    if (activeTool)
+    {
+        activeTool->onRelease(x, y, pressure, tiltX, tiltY, *this);
+    }
+}
+
+void LayerManager::onHover(int x, int y)
+{
+    if (activeTool)
+    {
+        activeTool->onHover(x, y, *this);
+    }
+}
+
 void LayerManager::markRegionDirty(int x, int y, int w, int h, bool skipCache)
 {
     if (!skipCache)

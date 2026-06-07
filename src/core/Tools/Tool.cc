@@ -187,6 +187,9 @@ void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, L
     if (!isDrawing)
         return;
 
+    if (!shouldProcessMove())
+        return;
+
     manager.clearPreview();
     drawShapePreview(startX, startY, x, y, manager);
     manager.showPreview();

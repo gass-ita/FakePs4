@@ -89,7 +89,7 @@ void Canvas::tabletEvent(QTabletEvent *event)
     if (event->type() == QEvent::TabletPress)
     {
         lastProcessedPos = imgPos;
-        activeTool->onPress(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
+        layerManager.onPress(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
         update();
     }
     else if (event->type() == QEvent::TabletMove)
@@ -98,14 +98,14 @@ void Canvas::tabletEvent(QTabletEvent *event)
         // ONLY do the heavy shape math if the pen physically moved to a new pixel!
         if (imgPos != lastProcessedPos)
         {
-            activeTool->onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
+            layerManager.onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
             update();
             lastProcessedPos = imgPos; // Save the new position
         }
     }
     else if (event->type() == QEvent::TabletRelease)
     {
-        activeTool->onRelease(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
+        layerManager.onRelease(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
         update();
     }
 
@@ -125,7 +125,7 @@ void Canvas::mousePressEvent(QMouseEvent *event)
     else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
         QPoint imgPos = screenToImage(event->pos());
-        layerManager.getActiveTool()->onPress(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f, layerManager);
+        layerManager.onPress(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f);
     }
 }
 
@@ -143,14 +143,14 @@ void Canvas::mouseMoveEvent(QMouseEvent *event)
     // If drawing
     else if ((event->buttons() & Qt::LeftButton) && layerManager.getActiveTool())
     {
-
-        layerManager.getActiveTool()->onMove(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f, layerManager);
+        layerManager.onMove(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f);
+        update();
     }
 
     // Always update the hover preview (even if no buttons are pressed)
     if (layerManager.getActiveTool())
     {
-        layerManager.getActiveTool()->onHover(imgPos.x(), imgPos.y(), layerManager);
+        layerManager.onHover(imgPos.x(), imgPos.y());
     }
 }
 
@@ -164,7 +164,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent *event)
     else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
         QPoint imgPos = screenToImage(event->pos());
-        layerManager.getActiveTool()->onRelease(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f, layerManager);
+        layerManager.onRelease(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f);
     }
 }
 

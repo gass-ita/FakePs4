@@ -51,6 +51,12 @@ public:
 
     void addObserver(LMObserver *observer);
 
+    // events
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY);
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY);
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY);
+    void onHover(int x, int y);
+
     void markRegionDirty(int x, int y, int w, int h, bool skipCache = false);
 
     void renderRegion(int startX, int startY, int rWidth, int rHeight, std::vector<uint8_t> &outBuffer) const;
