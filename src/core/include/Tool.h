@@ -23,7 +23,7 @@ public:
         a = alpha;
     }
 
-    virtual void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) {}
+    virtual void onPress(int x, int y, float pressure = 1.0f, float tiltX, float tiltY, LayerManager &manager) {}
     virtual void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) {}
     virtual void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) {}
     virtual void onHover(int x, int y, LayerManager &manager) {}

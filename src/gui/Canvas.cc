@@ -5,7 +5,7 @@
 #include "Shape.h"
 
 Canvas::Canvas(QWidget *parent)
-    : QWidget(parent), layerManager(3840, 2160)
+    : QWidget(parent), layerManager(3840, 2160) // Initialize LayerManager with canvas size
 {
     // setFixedSize(layerManager.getWidth(), layerManager.getHeight());
     layerManager.addObserver(this);
@@ -70,26 +70,38 @@ void Canvas::onRegionChanged(int x, int y, int w, int h)
 
 void Canvas::tabletEvent(QTabletEvent *event)
 {
-    // Qt6 uses position().toPoint(). If using Qt5, use pos()
     QPoint imgPos = screenToImage(event->position().toPoint());
 
-    float pressure = event->pressure(); // 0.0 to 1.0
-    float tiltX = event->xTilt();       // -60 to 60 degrees
-    float tiltY = event->yTilt();       // -60 to 60 degrees
+    float pressure = event->pressure();
+    float tiltX = event->xTilt();
+    float tiltY = event->yTilt();
 
     Tool *activeTool = layerManager.getActiveTool();
     if (!activeTool)
         return;
 
+    // ==========================================
+    // THE ANTI-JITTER FILTER
+    // ==========================================
+    // A static variable remembers its value between function calls
+    static QPoint lastProcessedPos = QPoint(-1, -1);
+
     if (event->type() == QEvent::TabletPress)
     {
+        lastProcessedPos = imgPos;
         activeTool->onPress(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
         update();
     }
     else if (event->type() == QEvent::TabletMove)
     {
-        activeTool->onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
-        update();
+
+        // ONLY do the heavy shape math if the pen physically moved to a new pixel!
+        if (imgPos != lastProcessedPos)
+        {
+            activeTool->onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY, layerManager);
+            update();
+            lastProcessedPos = imgPos; // Save the new position
+        }
     }
     else if (event->type() == QEvent::TabletRelease)
     {
@@ -97,7 +109,6 @@ void Canvas::tabletEvent(QTabletEvent *event)
         update();
     }
 
-    // Accept the event so Qt knows we handled it and doesn't fire a duplicate mouse event!
     event->accept();
 }
 
