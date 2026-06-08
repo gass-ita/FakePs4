@@ -12,9 +12,10 @@ class MainWindow : public QMainWindow
 {
     Q_OBJECT
 public:
-    MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(int canvasWidth, int canvasHeight, const QString &filePath = "", QWidget *parent = nullptr);
 
 private:
+    QColor currentToolColor = Qt::red;
     Canvas *canvas;
 };
 

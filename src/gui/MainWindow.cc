@@ -4,6 +4,7 @@
 #include <QColorDialog>
 #include <QPixmap>
 #include <QSlider>
+#include <QLineEdit>
 #include <QLabel>
 #include <QDockWidget>
 #include <QListWidget>
@@ -28,13 +29,61 @@
 #include <QFutureWatcher>
 #include <QToolButton>
 #include <QMenuBar>
+#include <QScrollBar>
+#include <QGridLayout>
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
+MainWindow::MainWindow(int canvasWidth, int canvasHeight, const QString &filePath, QWidget *parent) : QMainWindow(parent)
 {
     setWindowTitle("FakePs4");
 
-    canvas = new Canvas(this);
-    setCentralWidget(canvas);
+    canvas = new Canvas(canvasWidth, canvasHeight, this);
+    // ==========================================
+    // THE SCROLLBAR LAYOUT
+    // ==========================================
+    QWidget *centralContainer = new QWidget(this);
+    QGridLayout *gridLayout = new QGridLayout(centralContainer);
+
+    // Remove the default margins so the canvas touches the edges
+    gridLayout->setContentsMargins(0, 0, 0, 0);
+    gridLayout->setSpacing(0);
+
+    QScrollBar *vScrollBar = new QScrollBar(Qt::Vertical, this);
+    QScrollBar *hScrollBar = new QScrollBar(Qt::Horizontal, this);
+
+    // Add widgets to the grid: Canvas at (0,0), V-Bar at (0,1), H-Bar at (1,0)
+    gridLayout->addWidget(canvas, 0, 0);
+    gridLayout->addWidget(vScrollBar, 0, 1);
+    gridLayout->addWidget(hScrollBar, 1, 0);
+
+    setCentralWidget(centralContainer);
+
+    // ==========================================
+    // SCROLLBAR CONNECTIONS
+    // ==========================================
+
+    // 1. When Canvas zooms or pans, update the Scrollbars
+    connect(canvas, &Canvas::scrollRangeChanged, this, [hScrollBar, vScrollBar](int maxX, int maxY, int pageX, int pageY)
+            {
+        hScrollBar->setRange(-pageX/2, maxX); // Allow negative scroll to see past the left edge
+        vScrollBar->setRange(-pageY/2, maxY);
+        hScrollBar->setPageStep(pageX);
+        vScrollBar->setPageStep(pageY); });
+
+    connect(canvas, &Canvas::scrollValueChanged, this, [hScrollBar, vScrollBar](int x, int y)
+            {
+        // Temporarily block signals so the scrollbars don't fire an event back to the canvas, causing an infinite loop!
+        hScrollBar->blockSignals(true);
+        vScrollBar->blockSignals(true);
+        
+        hScrollBar->setValue(x);
+        vScrollBar->setValue(y);
+        
+        hScrollBar->blockSignals(false);
+        vScrollBar->blockSignals(false); });
+
+    // 2. When the user drags a Scrollbar, update the Canvas
+    connect(hScrollBar, &QScrollBar::valueChanged, canvas, &Canvas::setScrollX);
+    connect(vScrollBar, &QScrollBar::valueChanged, canvas, &Canvas::setScrollY);
 
     QToolBar *toolbar = addToolBar("Tools");
 
@@ -90,11 +139,55 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     toolbar->addWidget(new QLabel(" Size: "));
 
     // Create the Slider
+    QLineEdit *sizeTextBox = new QLineEdit();
+    sizeTextBox->setFixedWidth(50);
+    sizeTextBox->setText("5");
     QSlider *sizeSlider = new QSlider(Qt::Horizontal);
-    sizeSlider->setRange(1, 50); // Brush size from 1px to 50px
-    sizeSlider->setValue(5);     // Default to 5
+    sizeSlider->setRange(1, 150); // Brush size from 1px to 50px
+    sizeSlider->setValue(5);      // Default to 5
     sizeSlider->setFixedWidth(150);
+    toolbar->addWidget(sizeTextBox);
     toolbar->addWidget(sizeSlider);
+
+    toolbar->addSeparator();
+
+    QAction *zoomOutAction = toolbar->addAction(" - "); // Or use a QIcon!
+
+    QLineEdit *zoomTextBox = new QLineEdit();
+    zoomTextBox->setText("100%");
+    zoomTextBox->setFixedWidth(60);
+    zoomTextBox->setAlignment(Qt::AlignCenter);
+    toolbar->addWidget(zoomTextBox);
+
+    QAction *zoomInAction = toolbar->addAction(" + ");
+
+    // --- ZOOM CONNECTIONS ---
+
+    // 1. Buttons -> Canvas
+    connect(zoomInAction, &QAction::triggered, canvas, &Canvas::zoomIn);
+    connect(zoomOutAction, &QAction::triggered, canvas, &Canvas::zoomOut);
+
+    // 2. Canvas -> Text Box (Updates when you use the scroll wheel OR buttons)
+    connect(canvas, &Canvas::zoomChanged, this, [zoomTextBox](int percentage)
+            { zoomTextBox->setText(QString::number(percentage) + "%"); });
+
+    // 3. Text Box -> Canvas (Allows the user to type "200" and hit Enter!)
+    connect(zoomTextBox, &QLineEdit::editingFinished, this, [this, zoomTextBox]()
+            {
+        QString text = zoomTextBox->text();
+        text.replace("%", ""); // Strip out the % sign if they typed it
+        
+        bool ok;
+        int value = text.toInt(&ok);
+        
+        if (ok) {
+            // Convert integer percentage back to float (e.g., 200 -> 2.0f)
+            canvas->setZoom(value / 100.0f); 
+        } else {
+            // If they typed gibberish ("abc"), reset the text box back to the actual zoom
+            int currentZoom = static_cast<int>(canvas->getZoom() * 100);
+            zoomTextBox->setText(QString::number(currentZoom) + "%");
+        } });
 
     // ==========================================
     // LAYERS DOCK
@@ -160,19 +253,35 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(sizeSlider, &QSlider::valueChanged, this, [this](int value)
             { canvas->setToolSize(value); });
 
+    connect(sizeSlider, &QSlider::valueChanged, this, [sizeTextBox](int value)
+            { sizeTextBox->setText(QString::number(value)); });
+
+    connect(sizeTextBox, &QLineEdit::editingFinished, this, [sizeTextBox, sizeSlider]()
+            {
+                bool ok = false;
+                int value = sizeTextBox->text().toInt(&ok);
+                if (!ok) {
+                    sizeTextBox->setText(QString::number(sizeSlider->value()));
+                    return;
+                }
+
+                value = qBound(sizeSlider->minimum(), value, sizeSlider->maximum());
+                sizeSlider->setValue(value); });
+
     // Wire up the Color Picker
     connect(colorAction, &QAction::triggered, this, [this, colorAction]()
             {
         
         // ADD THE FLAG HERE: QColorDialog::ShowAlphaChannel
         QColor newColor = QColorDialog::getColor(
-            Qt::red, 
+            currentToolColor, 
             this, 
             "Choose Brush Color", 
             QColorDialog::ShowAlphaChannel
         );
         
         if (newColor.isValid()) {
+            currentToolColor = newColor;
             canvas->setToolColor(newColor.red(), newColor.green(), newColor.blue(), newColor.alpha());
             
             QPixmap pixmap(24, 24);
@@ -187,38 +296,46 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         } });
 
     // 1. Add Layer Button
+    // 1. Add Layer Button
     connect(addLayerBtn, &QPushButton::clicked, this, [this, layerList, createLayerItem]()
             {
-        int newIndex = layerList->count();
-        QString layerName = QString("Layer %1").arg(newIndex);
+        // The new engine index is just the current count (e.g., 3 layers means new index is 3)
+        int engineIndex = layerList->count();
+        QString layerName = QString("Layer %1").arg(engineIndex);
         
         canvas->addNewLayer(layerName);
         
-        // Add the interactive item
-        layerList->addItem(createLayerItem(layerName));
-        layerList->setCurrentRow(newIndex); });
+        // INSERT AT THE TOP OF THE UI LIST! (Row 0)
+        layerList->insertItem(0, createLayerItem(layerName));
+        
+        // Automatically select the new top layer
+        layerList->setCurrentRow(0); });
 
     // 2. Change Active Layer (Clicking an item)
-    connect(layerList, &QListWidget::currentRowChanged, this, [this](int row)
+    // 2. Change Active Layer (Clicking an item)
+    // 2. Change Active Layer (Clicking an item)
+    connect(layerList, &QListWidget::currentRowChanged, this, [this, layerList](int row)
             {
         if (row >= 0) {
-            canvas->setActiveLayer(row);
+            // THE REVERSE MATH
+            int engineIndex = (layerList->count() - 1) - row;
+            canvas->setActiveLayer(engineIndex);
         } });
 
     // 3. Rename or Toggle Visibility
-    // This fires whenever a checkbox is clicked OR text is edited
     connect(layerList, &QListWidget::itemChanged, this, [this, layerList](QListWidgetItem *item)
             {
         int row = layerList->row(item);
         if (row < 0) return;
 
-        // Sync the visibility state
+        // THE REVERSE MATH
+        int engineIndex = (layerList->count() - 1) - row;
+
         bool isVisible = (item->checkState() == Qt::Checked);
-        canvas->setLayerVisibility(row, isVisible);
+        canvas->setLayerVisibility(engineIndex, isVisible);
+        canvas->setLayerName(engineIndex, item->text()); });
 
-        // Sync the name
-        canvas->setLayerName(row, item->text()); });
-
+    // 4. Context Menu
     connect(layerList, &QListWidget::customContextMenuRequested, this, [this, layerList](const QPoint &pos)
             {
         // Find exactly which layer item they right-clicked on
@@ -231,10 +348,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         QMenu contextMenu(this);
         QAction *renameAction = contextMenu.addAction("Rename");
         QAction *propertiesAction = contextMenu.addAction("Properties...");
-        QAction *filterAction = contextMenu.addAction("Filter..."); // <--- NEW ACTION
+        QAction *filterAction = contextMenu.addAction("Filter..."); 
 
         // Spawn the menu exactly where the mouse cursor is
         QAction *selectedAction = contextMenu.exec(layerList->mapToGlobal(pos));
+
+        if (!selectedAction) return; // They clicked away without choosing
+
+        // ==========================================
+        // THE REVERSE MATH (Calculate once!)
+        // ==========================================
+        int uiRow = layerList->row(item);
+        int engineIndex = (layerList->count() - 1) - uiRow;
 
         // ACTION 1: RENAME
         if (selectedAction == renameAction) {
@@ -243,15 +368,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         // ACTION 2: PROPERTIES (OPACITY SLIDER)
         else if (selectedAction == propertiesAction) {
             
-            int row = layerList->row(item);
-
             QDialog dialog(this);
             dialog.setWindowTitle(item->text() + " Properties");
             dialog.setMinimumWidth(250);
             
             QVBoxLayout layout(&dialog);
 
-            float currentOpacity = canvas->getLayerManager().getLayers()[row]->opacity;
+            // Fetch using engineIndex!
+            float currentOpacity = canvas->getLayerManager().getLayers()[engineIndex]->opacity;
             int currentPercentage = static_cast<int>(currentOpacity * 100);
 
             QLabel label(QString("Opacity: %1%").arg(currentPercentage));
@@ -269,12 +393,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                 label.setText(QString("Opacity: %1%").arg(value));
             });
 
-            connect(buttonBox.button(QDialogButtonBox::Apply), &QPushButton::clicked, this, [this, &slider, row]() {
-                canvas->setLayerOpacity(row, slider.value());
+            // Capture engineIndex in these lambdas!
+            connect(buttonBox.button(QDialogButtonBox::Apply), &QPushButton::clicked, this, [this, &slider, engineIndex]() {
+                canvas->setLayerOpacity(engineIndex, slider.value());
             });
 
-            connect(&buttonBox, &QDialogButtonBox::accepted, this, [this, &dialog, &slider, row]() {
-                canvas->setLayerOpacity(row, slider.value());
+            connect(&buttonBox, &QDialogButtonBox::accepted, this, [this, &dialog, &slider, engineIndex]() {
+                canvas->setLayerOpacity(engineIndex, slider.value());
                 dialog.accept(); 
             });
 
@@ -289,11 +414,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
         // ==========================================
         else if (selectedAction == filterAction)
         {
-            int row = layerList->row(item);
-
-            // Force the clicked layer to become the active one so applyFilter targets it!
-            layerList->setCurrentRow(row);
-            canvas->setActiveLayer(row);
+            // Set the UI visually using uiRow, but tell the core engine to use engineIndex
+            layerList->setCurrentRow(uiRow);
+            canvas->setActiveLayer(engineIndex);
 
             QDialog dialog(this);
             dialog.setWindowTitle("Apply Filter");
@@ -313,7 +436,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             layout.addWidget(new QLabel("Select Filter:"));
             layout.addWidget(filterCombo);
 
-            // 2. The Stacked UI (Changes based on dropdown)
+            // 2. The Stacked UI
             QStackedWidget *stackedParams = new QStackedWidget(&dialog);
 
             // --- PAGE 0: Gaussian Blur ---
@@ -331,7 +454,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             layoutGaussian->addRow("Sigma:", sigmaSpin);
             stackedParams->addWidget(pageGaussian);
 
-            // --- PAGE 1: Convolution Intensity (Sharpen, Edge, Emboss) ---
+            // --- PAGE 1: Convolution Intensity ---
             QWidget *pageIntensity = new QWidget();
             QFormLayout *layoutIntensity = new QFormLayout(pageIntensity);
             QDoubleSpinBox *intensitySpin = new QDoubleSpinBox();
@@ -341,7 +464,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             layoutIntensity->addRow("Intensity:", intensitySpin);
             stackedParams->addWidget(pageIntensity);
 
-            // --- PAGE 2: Blend Amount (Invert, Grayscale) ---
+            // --- PAGE 2: Blend Amount ---
             QWidget *pageBlend = new QWidget();
             QFormLayout *layoutBlend = new QFormLayout(pageBlend);
             QDoubleSpinBox *blendSpin = new QDoubleSpinBox();
@@ -369,25 +492,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
             // 3. Connect Dropdown to Stacked UI
             connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), [stackedParams](int index)
                     {
-                        if (index == 0)
-                            stackedParams->setCurrentIndex(0); // Gaussian
-                        else if (index >= 1 && index <= 3)
-                            stackedParams->setCurrentIndex(1); // Convolution (Sharpen, etc)
-                        else if (index >= 4 && index <= 5)
-                            stackedParams->setCurrentIndex(2); // Point (Invert, Gray)
-                        else if (index == 6)
-                            stackedParams->setCurrentIndex(3); // Brightness/Contrast
+                        if (index == 0) stackedParams->setCurrentIndex(0); 
+                        else if (index >= 1 && index <= 3) stackedParams->setCurrentIndex(1); 
+                        else if (index >= 4 && index <= 5) stackedParams->setCurrentIndex(2); 
+                        else if (index == 6) stackedParams->setCurrentIndex(3); 
                     });
 
             // 4. Buttons
             QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
             layout.addWidget(&buttonBox);
 
-            // 5. Apply the math asynchronously when they hit OK
-            connect(&buttonBox, &QDialogButtonBox::accepted, this, [this, &dialog, filterCombo, sizeSpin, sigmaSpin, intensitySpin, blendSpin, brightSpin, contrastSpin, row]()
+            // 5. Apply the math asynchronously (Capture engineIndex here!)
+            connect(&buttonBox, &QDialogButtonBox::accepted, this, [this, &dialog, filterCombo, sizeSpin, sigmaSpin, intensitySpin, blendSpin, brightSpin, contrastSpin, engineIndex]()
                     {
                 
-                // CRITICAL: Grab ALL values before the dialog closes and destroys the UI elements!
                 int filterType = filterCombo->currentIndex();
                 int size = sizeSpin->value();
                 float sigma = sigmaSpin->value();
@@ -396,7 +514,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                 float bright = brightSpin->value();
                 float contrast = contrastSpin->value();
                 
-                // Setup Progress Bar
                 QProgressDialog *progress = new QProgressDialog("Calculating Filter...", nullptr, 0, 0, this);
                 progress->setWindowModality(Qt::WindowModal);
                 progress->setAttribute(Qt::WA_DeleteOnClose);
@@ -413,10 +530,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                     canvas->update(); 
                 });
 
-                // Fire off to Background Thread
-                QFuture<void> future = QtConcurrent::run([this, row, filterType, size, sigma, intensity, blend, bright, contrast]() {
+                // Pass engineIndex to the background thread!
+                QFuture<void> future = QtConcurrent::run([this, engineIndex, filterType, size, sigma, intensity, blend, bright, contrast]() {
                     
-                    // Construct the correct filter based on the dropdown choice using a smart pointer
                     std::unique_ptr<Filter> activeFilter;
 
                     switch(filterType) {
@@ -429,9 +545,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                         case 6: activeFilter = std::make_unique<BrightnessContrastFilter>(bright, contrast); break;
                     }
 
-                    // Apply the math to the layer memory safely
+                    // Apply the math to the mathematically correct layer
                     if (activeFilter) {
-                        activeFilter->apply(this->canvas->getLayerManager().getLayers()[row].get());
+                        activeFilter->apply(this->canvas->getLayerManager().getLayers()[engineIndex].get());
                     }
                 });
 
@@ -462,48 +578,60 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // ==========================================
     // LOAD NATIVE PROJECT (Ctrl+O)
     // ==========================================
+    // ==========================================
+    // LOAD NATIVE PROJECT (Ctrl+O)
+    // ==========================================
     QShortcut *openShortcut = new QShortcut(QKeySequence::Open, this);
     connect(openShortcut, &QShortcut::activated, this, [this]()
             {
         QString filePath = QFileDialog::getOpenFileName(this, "Open Project", "", "Paint Project (*.ptproj)");
 
         if (!filePath.isEmpty()) {
-            if (!canvas->getLayerManager().loadProject(filePath.toStdString())) {
-                QMessageBox::critical(this, "Error", "File is corrupted or not a valid project.");
-            } else {
-                // Resize the actual Qt Window widget if the loaded canvas is a different size!
-                canvas->setFixedSize(canvas->getLayerManager().getWidth(), canvas->getLayerManager().getHeight());
+            try {
+                if (!canvas->getLayerManager().loadProject(filePath.toStdString())) {
+                    QMessageBox::critical(this, "Error", "File is corrupted or not a valid project.");
+                } else {
+                    canvas->syncScrollbars();
+                    canvas->update();
+                }
+            } catch (const std::exception& e) {
+                // If the C++ Core Engine throws a fatal error, catch it here!
+                QMessageBox::critical(this, "Fatal Crash Prevented", "This save file is incompatible with the current engine version.");
             }
         } });
-
+    // Note the captured variables in the brackets: [this, layerList, createLayerItem]
     // Note the captured variables in the brackets: [this, layerList, createLayerItem]
     connect(canvas, &Canvas::coreLayerListChanged, this, [this, layerList, createLayerItem]()
             {
-            // 1. Temporarily block signals so clearing the list doesn't trigger active layer changes
-            layerList->blockSignals(true);
-            
-            // 2. Clear the Qt List Widget completely
-            layerList->clear(); 
+        // 1. Temporarily block signals so clearing the list doesn't trigger active layer changes
+        layerList->blockSignals(true);
+        
+        // 2. Clear the Qt List Widget completely
+        layerList->clear(); 
 
-            // 3. Ask the core engine for the current layers
-            const auto& layers = canvas->getLayerManager().getLayers();
+        // 3. Ask the core engine for the current layers
+        const auto& layers = canvas->getLayerManager().getLayers();
 
-            for (size_t i = 0; i < layers.size(); ++i)
-            {
+        // 4. REBUILD THE LIST IN REVERSE!
+        // We use insertItem(0, ...) so that as we loop from engine index 0 upwards,
+        // each subsequent layer pushes the previous one down, perfectly matching Photoshop's UI!
+        for (size_t i = 0; i < layers.size(); ++i)
+        {
+            QListWidgetItem *item = createLayerItem(QString::fromStdString(layers[i]->name));
 
-                    QListWidgetItem *item = createLayerItem(QString::fromStdString(layers[i]->name));
+            // Restore visibility checkboxes
+            item->setCheckState(layers[i]->visible ? Qt::Checked : Qt::Unchecked);
 
-                    // Restore visibility checkboxes
-                    item->setCheckState(layers[i]->visible ? Qt::Checked : Qt::Unchecked);
+            // Force it to the top of the UI list
+            layerList->insertItem(0, item);
+        }
 
-                    layerList->addItem(item);
-            }
-
-            // 5. Set the UI selection to match the active layer
-            layerList->setCurrentRow(layers.size() - 1 - canvas->getLayerManager().getActiveLayerIndex());
-            
-            // 6. Unblock signals so the user can click on layers again
-            layerList->blockSignals(false); });
+        // 5. Set the UI selection to match the active layer
+        // Since we inverted the visual stack, we also invert the selection index!
+        layerList->setCurrentRow(layers.size() - 1 - canvas->getLayerManager().getActiveLayerIndex());
+        
+        // 6. Unblock signals so the user can click on layers again
+        layerList->blockSignals(false); });
 
     connect(canvas, &Canvas::coreColorChanged, this, [this, colorAction](int r, int g, int b, int a)
             {
@@ -517,7 +645,28 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                 painter.fillRect(pixmap.rect(), QColor(r, g, b, a));
                 
                 // 4. THIS is the missing line! Update the actual toolbar icon.
+                currentToolColor = QColor(r, g, b, a);
                 colorAction->setIcon(QIcon(pixmap)); });
 
+    if (!filePath.isEmpty())
+    {
+        try
+        {
+            // Ask the engine to load the file
+            if (canvas->getLayerManager().loadProject(filePath.toStdString()))
+            {
+                canvas->syncScrollbars();
+                canvas->update();
+            }
+            else
+            {
+                QMessageBox::critical(this, "Error", "Failed to load the startup project.");
+            }
+        }
+        catch (...)
+        {
+            QMessageBox::critical(this, "Error", "Corrupted project file.");
+        }
+    }
     adjustSize();
 }

@@ -14,11 +14,20 @@ class Canvas : public QWidget, public LMObserver
 {
     Q_OBJECT
 
+public slots:
+    void setScrollX(int value);
+    void setScrollY(int value);
+    void setZoom(float newZoom);
+    void zoomIn();
+    void zoomOut();
+
 public:
-    explicit Canvas(QWidget *parent = nullptr);
+    void syncScrollbars(); // The core math function
+    explicit Canvas(int canvasWidth = 1920, int canvasHeight = 1080, QWidget *parent = nullptr);
     void onRegionChanged(int x, int y, int width, int height) override;
     void onLayerListChanged() override { emit coreLayerListChanged(); };
     void OnColorChange(int r, int g, int b, int a) override { emit coreColorChanged(r, g, b, a); };
+    float getZoom() const { return zoom; }
     void setTool(std::unique_ptr<Tool> newTool)
     {
         layerManager.setActiveTool(std::move(newTool));
@@ -54,6 +63,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     void leaveEvent(QEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     LayerManager layerManager;
@@ -75,6 +85,9 @@ signals:
     // 2. Define a Qt signal to shout to the rest of the app
     void coreLayerListChanged();
     void coreColorChanged(int r, int g, int b, int a);
+    void scrollRangeChanged(int maxX, int maxY, int pageStepX, int pageStepY);
+    void scrollValueChanged(int x, int y);
+    void zoomChanged(int zoomPercentage); // We pass an integer (e.g., 100, 150) for a clean UI
 };
 
 #endif // CANVAS_H
