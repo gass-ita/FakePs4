@@ -1,7 +1,6 @@
 #include "Tool.h"
 #include <iostream>
 #include <cmath>
-// for round
 
 void ColorPickerTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
@@ -18,7 +17,6 @@ void StrokeTool::onPress(int x, int y, float pressure, float tiltX, float tiltY,
     manager.clearPreview();
     isDrawing = true;
 
-    // Reset the Stabilizer History!
     pointHistory.clear();
     sumX = 0;
     sumY = 0;
@@ -50,7 +48,6 @@ void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, 
     sumY -= pointHistory.front().second;
     pointHistory.pop_front();
 
-    // --- 1. STABILIZER (MOVING AVERAGE) ---
     pointHistory.push_back({x, y});
     sumX += x;
     sumY += y;
@@ -59,44 +56,34 @@ void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, 
     int avgX = sumX / historyCount;
     int avgY = sumY / historyCount;
 
-    // --------------------------------------
-
     manager.beginBatch();
 
     int currentX = avgX;
     int currentY = avgY;
 
-    // 2. Midpoint calculation
     int startMidX = (prevX + lastX) / 2;
     int startMidY = (prevY + lastY) / 2;
     int endMidX = (lastX + currentX) / 2;
     int endMidY = (lastY + currentY) / 2;
 
-    // 3. Distance calculation (still using float for std::sqrt, but casting result to int)
     float dx1 = static_cast<float>(lastX - startMidX);
     float dy1 = static_cast<float>(lastY - startMidY);
     float dist1 = std::sqrt(dx1 * dx1 + dy1 * dy1);
     float dx2 = static_cast<float>(currentX - endMidX);
     float dy2 = static_cast<float>(currentY - endMidY);
     float dist2 = std::sqrt(dx2 * dx2 + dy2 * dy2);
-    // ==========================================
-    // ADAPTIVE BEZIER STEPPING (The 10x Speedup)
-    // ==========================================
-    // Thin brushes need tight steps. Fat brushes can step massive distances
-    // because their huge rounded caps overlap and hide the gaps!
+
     float stepDistance = std::max(1.0f, size * 0.25f);
     int steps = std::max(1, static_cast<int>((dist1 + dist2) / stepDistance));
-    // ==========================================
 
     int minX = x, minY = y, maxX = x, maxY = y;
 
     int currentSegX = startMidX;
     int currentSegY = startMidY;
 
-    // 4. Step along the curve
     for (int i = 1; i <= steps; ++i)
     {
-        float t = static_cast<float>(i) / steps; // 't' remains a float percentage
+        float t = static_cast<float>(i) / steps;
         int nextX, nextY;
 
         calculateBezierPoint(t, startMidX, lastX, endMidX, nextX);
@@ -113,11 +100,9 @@ void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, 
         currentSegY = nextY;
     }
 
-    // 5. Submit Dirty Rect
     manager.addDirtyRect(minX - size, minY - size, (maxX - minX) + size * 2 + 1, (maxY - minY) + size * 2 + 1);
     manager.endBatch();
 
-    // 6. Shift history
     prevX = lastX;
     prevY = lastY;
     lastX = currentX;
@@ -155,11 +140,11 @@ void BrushTool::drawHoverCursor(int x, int y, LayerManager &manager)
 
 void EraserTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
 {
-    Line(x0, y0, x1, y1, 0, 0, 0, 0, size).draw(manager); // Transparent!
+    Line(x0, y0, x1, y1, 0, 0, 0, 0, size).draw(manager);
 }
 void EraserTool::drawHoverCursor(int x, int y, LayerManager &manager)
 {
-    CircleOutline(x, y, size, 255, 0, 0, 255).draw(manager, &LayerManager::setPreviewPixel); // Red!
+    CircleOutline(x, y, size, 255, 0, 0, 255).draw(manager, &LayerManager::setPreviewPixel);
 }
 
 void SprayTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
@@ -187,7 +172,6 @@ void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, L
 {
     if (!isDrawing)
         return;
-
     if (!shouldProcessMove())
         return;
 
@@ -211,7 +195,6 @@ void ShapeTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY
 
 // --- CONCRETE SHAPE IMPLEMENTATIONS ---
 
-// 1. RECTANGLE
 void RectangleTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager)
 {
     int rx = std::min(sx, cx);
@@ -247,7 +230,6 @@ void RectangleTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager 
     }
 }
 
-// 2. ELLIPSE
 void EllipseTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager)
 {
     int rx = std::abs(cx - sx) / 2;
@@ -283,7 +265,6 @@ void EllipseTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager 
 
 void EllipseTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager)
 {
-    // Exactly the same logic, but routing to the permanent memory and addDirtyRect!
     int rx = std::abs(cx - sx) / 2;
     int ry = std::abs(cy - sy) / 2;
     int cenX = (sx + cx) / 2;
@@ -316,31 +297,26 @@ void EllipseTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &m
 }
 
 // ==========================================
-// FILL TOOL (Scanline Span Algorithm)
+// FILL TOOL
 // ==========================================
 void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
     manager.clearPreview();
 
-    // 1. Boundary check
     if (x < 0 || x >= manager.getWidth() || y < 0 || y >= manager.getHeight())
         return;
 
-    // 2. Sample the "Target Color" we want to overwrite
     uint8_t tr, tg, tb, ta;
     manager.getPixel(x, y, tr, tg, tb, ta);
 
-    // Failsafe: If the pixel is already the exact color we are holding, do nothing!
     if (tr == r && tg == g && tb == b && ta == a)
         return;
 
     manager.beginBatch();
 
-    // The stack holds the X, Y coordinates of rows we still need to process
     std::vector<std::pair<int, int>> stack;
     stack.push_back({x, y});
 
-    // Track the dirty bounding box so we can dispatch the exact tiles later
     int minX = x, minY = y, maxX = x, maxY = y;
 
     while (!stack.empty())
@@ -351,7 +327,6 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
         uint8_t cr, cg, cb, ca;
         int lx = cx;
 
-        // 3. Scan Left to find the wall
         while (lx >= 0)
         {
             manager.getPixel(lx, cy, cr, cg, cb, ca);
@@ -359,9 +334,8 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
                 break;
             lx--;
         }
-        lx++; // Step back to the valid pixel
+        lx++;
 
-        // 4. Scan Right to find the other wall
         int rx = cx;
         while (rx < manager.getWidth())
         {
@@ -372,7 +346,6 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
         }
         rx--;
 
-        // Update our dirty bounding box
         minX = std::min(minX, lx);
         maxX = std::max(maxX, rx);
         minY = std::min(minY, cy);
@@ -381,12 +354,10 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
         bool spanAbove = false;
         bool spanBelow = false;
 
-        // 5. Burn the horizontal line into memory and check above/below for more space
         for (int i = lx; i <= rx; ++i)
         {
             manager.setPixel(i, cy, r, g, b, a);
 
-            // Check the row ABOVE
             if (cy > 0)
             {
                 manager.getPixel(i, cy - 1, cr, cg, cb, ca);
@@ -398,12 +369,9 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
                     spanAbove = true;
                 }
                 else if (!match)
-                {
                     spanAbove = false;
-                }
             }
 
-            // Check the row BELOW
             if (cy < manager.getHeight() - 1)
             {
                 manager.getPixel(i, cy + 1, cr, cg, cb, ca);
@@ -415,120 +383,99 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
                     spanBelow = true;
                 }
                 else if (!match)
-                {
                     spanBelow = false;
-                }
             }
         }
     }
 
-    // 6. Report the final, optimized bounding box to the Tile Cache and Undo System!
     manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
     manager.endBatch();
 }
+
 // ==========================================
-// CONE BRUSH TOOL
+// TOOL DECORATORS
 // ==========================================
 
-// 1. Initialize the threshold in the constructor
-// 1. Initialize the rate and factor
-ConeBrushTool::ConeBrushTool(float rate, float factor)
-    : growthRate(rate), growthFactor(factor), calculatedMaxSize(0.0f), originalBaseSize(5) {}
+PressureSizeDecorator::PressureSizeDecorator(std::unique_ptr<Tool> tool)
+    : ToolDecorator(std::move(tool)), originalBaseSize(5) {}
 
-void ConeBrushTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+void PressureSizeDecorator::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
-    // 1. Save the actual UI slider size
-    originalBaseSize = size;
+    if (!wrappedTool)
+        return;
 
-    // 2. Calculate the ceiling for this specific stroke! (e.g., 50 * 2.0 = 100)
+    // 1. Lock in the size that the UI slider is currently set to
+    originalBaseSize = wrappedTool->size;
+
+    // 2. Scale the wrapped tool's size by the physical pressure
+    wrappedTool->size = std::max(1, static_cast<int>(originalBaseSize * pressure));
+
+    // 3. Delegate execution
+    wrappedTool->onPress(x, y, pressure, tiltX, tiltY, manager);
+}
+
+void PressureSizeDecorator::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+{
+    if (!wrappedTool)
+        return;
+
+    wrappedTool->size = std::max(1, static_cast<int>(originalBaseSize * pressure));
+    wrappedTool->onMove(x, y, pressure, tiltX, tiltY, manager);
+}
+
+void PressureSizeDecorator::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+{
+    if (!wrappedTool)
+        return;
+
+    wrappedTool->onRelease(x, y, pressure, tiltX, tiltY, manager);
+
+    // 4. SNAP BACK! Restore the original UI size.
+    wrappedTool->size = originalBaseSize;
+}
+
+ConeGrowthDecorator::ConeGrowthDecorator(std::unique_ptr<Tool> tool, float rate, float factor)
+    : ToolDecorator(std::move(tool)), growthRate(rate), growthFactor(factor), originalBaseSize(5) {}
+
+void ConeGrowthDecorator::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+{
+    if (!wrappedTool)
+        return;
+
+    originalBaseSize = wrappedTool->size;
     calculatedMaxSize = static_cast<float>(originalBaseSize) * growthFactor;
-
-    // 3. Force the brush to start "really small" (1 pixel)
     currentDynamicSize = 1.0f;
 
-    // 4. Temporarily override the base size so the very first dot is small
-    size = static_cast<int>(currentDynamicSize);
-
-    // 5. Track position
+    wrappedTool->size = static_cast<int>(currentDynamicSize);
     rawLastX = x;
     rawLastY = y;
 
-    // 6. Draw the first dot
-    BrushTool::onPress(x, y, pressure, tiltX, tiltY, manager);
+    wrappedTool->onPress(x, y, pressure, tiltX, tiltY, manager);
 }
 
-void ConeBrushTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+void ConeGrowthDecorator::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
-    if (!isDrawing)
+    if (!wrappedTool)
         return;
 
-    // 1. Calculate distance moved
     float dist = std::sqrt(std::pow(x - rawLastX, 2) + std::pow(y - rawLastY, 2));
-
-    // 2. Grow the brush
     currentDynamicSize += (dist * growthRate);
-
-    // 3. Clamp it using the dynamic ceiling we calculated in onPress!
     currentDynamicSize = std::min(currentDynamicSize, calculatedMaxSize);
 
-    // 4. Override base size for the Bezier curves
-    size = static_cast<int>(currentDynamicSize);
-
-    // 5. Update tracking
+    wrappedTool->size = static_cast<int>(currentDynamicSize);
     rawLastX = x;
     rawLastY = y;
 
-    // 6. Draw the curve
-    BrushTool::onMove(x, y, pressure, tiltX, tiltY, manager);
+    wrappedTool->onMove(x, y, pressure, tiltX, tiltY, manager);
 }
 
-void ConeBrushTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+void ConeGrowthDecorator::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
-    BrushTool::onRelease(x, y, pressure, tiltX, tiltY, manager);
-
-    // SNAP BACK! Restore the original UI size so the hover cursor isn't permanently massive.
-    size = originalBaseSize;
-}
-
-// ==========================================
-// PRESSURE BRUSH TOOL
-// ==========================================
-
-PressureBrushTool::PressureBrushTool() : originalBaseSize(5) {}
-
-void PressureBrushTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
-{
-    // 1. Lock in the size that the UI slider is currently set to
-    originalBaseSize = size;
-
-    // 2. Scale the size by the physical pressure (0.0 to 1.0)
-    // Example: UI size is 50. Pressure is 0.5 (half). Brush becomes 25px.
-    size = std::max(1, static_cast<int>(originalBaseSize * pressure));
-
-    // 3. Let the base class draw the initial dot using this new temporary size
-    BrushTool::onPress(x, y, pressure, tiltX, tiltY, manager);
-}
-
-void PressureBrushTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
-{
-    if (!isDrawing)
+    if (!wrappedTool)
         return;
 
-    // 1. Continually update the size based on how hard they are pressing right now
-    size = std::max(1, static_cast<int>(originalBaseSize * pressure));
-
-    // 2. Pass control down to the StrokeTool Bezier math to draw the curve segments
-    BrushTool::onMove(x, y, pressure, tiltX, tiltY, manager);
-}
-
-void PressureBrushTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
-{
-    // 1. Finish the stroke
-    BrushTool::onRelease(x, y, pressure, tiltX, tiltY, manager);
-
-    // 2. SNAP BACK! Restore the original UI size.
-    // This ensures your UI slider stays accurate and the hover cursor goes back to normal.
-    size = originalBaseSize;
+    wrappedTool->onRelease(x, y, pressure, tiltX, tiltY, manager);
+    wrappedTool->size = originalBaseSize;
 }
 
 // ==========================================
@@ -542,20 +489,13 @@ void MaskBrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager
     if (!brushTip)
         return;
 
-    // 1. Calculate the distance of this specific segment
     float dx = x1 - x0;
     float dy = y1 - y0;
     float dist = std::sqrt(dx * dx + dy * dy);
 
-    // 2. Calculate "Brush Spacing" (How close the stamps are to each other)
-    // 10% to 15% of the brush radius makes a perfectly smooth, continuous line.
-    // If you set this higher (e.g., 100%), it will draw dotted lines!
     float spacing = std::max(1.0f, static_cast<float>(size * 0.15f));
-
-    // 3. Figure out how many stamps we need to drop along this line
     int steps = std::max(1, static_cast<int>(dist / spacing));
 
-    // 4. Drop the stamps!
     for (int i = 0; i <= steps; ++i)
     {
         float t = static_cast<float>(i) / steps;
@@ -568,12 +508,10 @@ void MaskBrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager
 
 void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)
 {
-    // 1. Lock the stamp dimensions to exactly 'size'
     int stampDiameter = size;
     if (stampDiameter <= 0)
         stampDiameter = 1;
 
-    // 2. To center the stamp, we offset by half the size
     int offset = stampDiameter / 2;
     int startX = cx - offset;
     int startY = cy - offset;
@@ -581,19 +519,16 @@ void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)
     int maskW = brushTip->width;
     int maskH = brushTip->height;
 
-    // 3. Loop over the bounding box of the stamp on the canvas
     for (int y = 0; y < stampDiameter; ++y)
     {
         for (int x = 0; x < stampDiameter; ++x)
         {
-            // NEAREST-NEIGHBOR SCALING
             int maskX = (x * maskW) / stampDiameter;
             int maskY = (y * maskH) / stampDiameter;
 
             uint8_t mr, mg, mb, ma;
             brushTip->getPixel(maskX, maskY, mr, mg, mb, ma);
 
-            // If the mask has ink here, blend it onto the canvas
             if (ma > 0)
             {
                 int canvasX = startX + x;
@@ -603,7 +538,6 @@ void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)
                 float normalizedToolAlpha = a / 255.0f;
                 uint8_t finalAlpha = static_cast<uint8_t>(normalizedMaskAlpha * normalizedToolAlpha * 255.0f);
 
-                // --- STANDARD ALPHA BLENDING ---
                 uint8_t bgR, bgG, bgB, bgA;
                 manager.getPixel(canvasX, canvasY, bgR, bgG, bgB, bgA);
 
@@ -614,7 +548,6 @@ void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)
                 uint8_t outG = static_cast<uint8_t>((g * alphaF) + (bgG * invAlpha));
                 uint8_t outB = static_cast<uint8_t>((b * alphaF) + (bgB * invAlpha));
 
-                // Keep the alpha ceiling at 255
                 uint8_t outA = std::min(255, bgA + finalAlpha);
 
                 manager.setPixel(canvasX, canvasY, outR, outG, outB, outA);

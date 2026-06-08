@@ -246,39 +246,98 @@ protected:
     void drawHoverCursor(int x, int y, LayerManager &manager) override;
 };
 
-class ConeBrushTool : public BrushTool
+// ==========================================
+// DECORATOR BASE CLASS
+// ==========================================
+class ToolDecorator : public Tool
+{
+protected:
+    std::unique_ptr<Tool> wrappedTool;
+
+public:
+    ToolDecorator(std::unique_ptr<Tool> tool) : wrappedTool(std::move(tool))
+    {
+        // Sync the base variables when created
+        if (this->wrappedTool)
+        {
+            this->size = this->wrappedTool->size;
+            this->r = this->wrappedTool->r;
+            this->g = this->wrappedTool->g;
+            this->b = this->wrappedTool->b;
+            this->a = this->wrappedTool->a;
+        }
+    }
+
+    // Intercept and pass down UI settings
+    void setSize(int newSize) override
+    {
+        Tool::setSize(newSize);
+        if (wrappedTool)
+            wrappedTool->setSize(newSize);
+    }
+    void setColor(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = 255) override
+    {
+        Tool::setColor(red, green, blue, alpha);
+        if (wrappedTool)
+            wrappedTool->setColor(red, green, blue, alpha);
+    }
+
+    // Intercept and pass down canvas events
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override
+    {
+        if (wrappedTool)
+            wrappedTool->onPress(x, y, pressure, tiltX, tiltY, manager);
+    }
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override
+    {
+        if (wrappedTool)
+            wrappedTool->onMove(x, y, pressure, tiltX, tiltY, manager);
+    }
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override
+    {
+        if (wrappedTool)
+            wrappedTool->onRelease(x, y, pressure, tiltX, tiltY, manager);
+    }
+    void onHover(int x, int y, LayerManager &manager) override
+    {
+        if (wrappedTool)
+            wrappedTool->onHover(x, y, manager);
+    }
+};
+
+// ==========================================
+// CONCRETE DECORATORS
+// ==========================================
+class PressureSizeDecorator : public ToolDecorator
+{
+private:
+    int originalBaseSize;
+
+public:
+    PressureSizeDecorator(std::unique_ptr<Tool> tool);
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
+};
+
+class ConeGrowthDecorator : public ToolDecorator
 {
 private:
     float currentDynamicSize = 1.0f;
     float growthRate;
-    float growthFactor;      // The multiplier (e.g., 2.0x)
-    float calculatedMaxSize; // We will calculate this when the user clicks!
+    float growthFactor;
+    float calculatedMaxSize = 0.0f;
     int originalBaseSize;
     int rawLastX = 0;
     int rawLastY = 0;
 
 public:
-    // rate: How fast it grows per pixel dragged
-    // factor: The final maximum size multiplier (2.0 = double the UI size)
-    ConeBrushTool(float rate = 0.05f, float factor = 1.0f);
-
+    ConeGrowthDecorator(std::unique_ptr<Tool> tool, float rate = 0.05f, float factor = 1.0f);
     void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
     void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
     void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
 };
 
-class PressureBrushTool : public BrushTool
-{
-private:
-    int originalBaseSize;
-
-public:
-    PressureBrushTool();
-
-    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
-    void onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
-    void onRelease(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
-};
 class EraserTool : public StrokeTool
 {
 protected:

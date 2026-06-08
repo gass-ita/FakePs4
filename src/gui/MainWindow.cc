@@ -227,11 +227,17 @@ MainWindow::MainWindow(int canvasWidth, int canvasHeight, const QString &filePat
 
     // Brushes
     connect(brushAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<BrushTool>()); }); // Assuming you have a standard BrushTool class
+            { canvas->setTool(std::make_unique<MaskBrushTool>(MaskBrushTool::createRoundBrushMask(200, 0.8f))); });
     connect(pressureBrushAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<PressureBrushTool>()); });
+            {
+        std::unique_ptr<Tool> brush = std::make_unique<MaskBrushTool>(MaskBrushTool::createRoundBrushMask(200, 0.8f));
+    brush = std::make_unique<PressureSizeDecorator>(std::move(brush));
+    canvas->setTool(std::move(brush)); });
     connect(coneAction, &QAction::triggered, this, [this]()
-            { canvas->setTool(std::make_unique<ConeBrushTool>()); });
+            {
+        std::unique_ptr<Tool> brush = std::make_unique<MaskBrushTool>(MaskBrushTool::createRoundBrushMask(200, 0.8f));
+    brush = std::make_unique<ConeGrowthDecorator>(std::move(brush), 0.1f, 2.0f);
+    canvas->setTool(std::move(brush)); });
     connect(sprayAction, &QAction::triggered, this, [this]()
             { canvas->setTool(std::make_unique<SprayTool>()); });
 
