@@ -51,43 +51,48 @@ void Line::draw(LayerManager &manager, PixelSetter setter) const
         int maxY = std::max(y0, y1) + radius;
 
         // Pre-calculate line segment vector lengths for math speed
+        // Pre-calculate line segment vector lengths
         float dx_line = static_cast<float>(x1 - x0);
         float dy_line = static_cast<float>(y1 - y0);
-        float lineLengthSquared = dx_line * dx_line + dy_line * dy_line;
+        float lineLengthSquared = (dx_line * dx_line) + (dy_line * dy_line);
 
-        // 2. Iterate through the bounding box EXACTLY ONCE
+        // 1. PRE-CALCULATE INVERSE LENGTH to avoid division inside the loop
+        float invLengthSq = (lineLengthSquared > 0.0f) ? (1.0f / lineLengthSquared) : 0.0f;
+
+        // 2. Iterate through the bounding box
         for (int y = minY; y <= maxY; ++y)
         {
+            // HOIST CONSTANT Y-MATH: Calculate this once per row, not per pixel
+            float dy_base = static_cast<float>(y - y0);
+            float y_term = dy_base * dy_line;
+
             for (int x = minX; x <= maxX; ++x)
             {
+                float dx_base = static_cast<float>(x - x0);
                 float distSquared;
 
                 if (lineLengthSquared == 0.0f)
                 {
-                    // The line is just a single dot (user clicked without dragging)
-                    float dx_pt = static_cast<float>(x - x0);
-                    float dy_pt = static_cast<float>(y - y0);
-                    distSquared = dx_pt * dx_pt + dy_pt * dy_pt;
+                    // Single dot (clicked without dragging)
+                    distSquared = (dx_base * dx_base) + (dy_base * dy_base);
                 }
                 else
                 {
-                    // Calculate 't' (a percentage from 0.0 to 1.0 along the segment)
-                    float t = ((x - x0) * dx_line + (y - y0) * dy_line) / lineLengthSquared;
+                    // 3. MULTIPLY instead of divide for extreme speed
+                    float t = (dx_base * dx_line + y_term) * invLengthSq;
 
-                    // Clamp 't' so we get perfectly rounded caps at the ends!
-                    t = std::max(0.0f, std::min(1.0f, t));
+                    // 4. Fast clamp (slightly faster than std::max/min)
+                    t = (t < 0.0f) ? 0.0f : ((t > 1.0f) ? 1.0f : t);
 
-                    // Find the exact closest point on the core line segment
                     float closestX = x0 + t * dx_line;
                     float closestY = y0 + t * dy_line;
 
-                    // Check distance from current pixel to that closest point
                     float dx_pt = static_cast<float>(x) - closestX;
                     float dy_pt = static_cast<float>(y) - closestY;
-                    distSquared = dx_pt * dx_pt + dy_pt * dy_pt;
+                    distSquared = (dx_pt * dx_pt) + (dy_pt * dy_pt);
                 }
 
-                // 3. If within radius, draw it!
+                // 5. If within radius, draw it
                 if (distSquared <= radiusSquared)
                 {
                     (manager.*setter)(x, y, r, g, b, a);

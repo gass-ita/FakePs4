@@ -84,9 +84,7 @@ void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, 
     // ==========================================
     // Thin brushes need tight steps. Fat brushes can step massive distances
     // because their huge rounded caps overlap and hide the gaps!
-    float stepDistance = std::max(1.0f, size * 0.15f);
-    stepDistance = std::min(stepDistance, 15.0f); // Cap it so sharp curves don't get blocky
-
+    float stepDistance = std::max(1.0f, size * 0.25f);
     int steps = std::max(1, static_cast<int>((dist1 + dist2) / stepDistance));
     // ==========================================
 
