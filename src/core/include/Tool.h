@@ -12,7 +12,7 @@ class Tool
 protected:
     virtual bool requiresHighFrequency() const { return true; }
     short int throttleMs = 16;        // lowfreq tools
-    short int highFreqThrottleMs = 8; // highfreq tools (like the brush) can skip throttling altogether for maximum responsiveness
+    short int highFreqThrottleMs = 0; // highfreq tools (like the brush) can skip throttling altogether for maximum responsiveness
     std::chrono::steady_clock::time_point lastTime;
 
 public:
@@ -92,7 +92,10 @@ protected:
     int prevX = 0;
     int prevY = 0;
 
-    short int smoothingWindow = 6; // the higher the smoother but more delay
+    int sumX = 0;
+    int sumY = 0;
+
+    short int smoothingWindow = 4; // the higher the smoother but more delay
     std::deque<std::pair<int, int>> pointHistory;
 
     // Pure virtual functions that child classes MUST implement

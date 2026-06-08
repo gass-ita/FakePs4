@@ -20,9 +20,14 @@ void StrokeTool::onPress(int x, int y, float pressure, float tiltX, float tiltY,
 
     // Reset the Stabilizer History!
     pointHistory.clear();
+    sumX = 0;
+    sumY = 0;
+
     for (int i = 0; i < smoothingWindow; ++i)
     {
         pointHistory.push_back({x, y});
+        sumX += x;
+        sumY += y;
     }
 
     lastX = x;
@@ -41,25 +46,19 @@ void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, 
     if (!isDrawing)
         return;
 
+    sumX -= pointHistory.front().first;
+    sumY -= pointHistory.front().second;
+    pointHistory.pop_front();
+
     // --- 1. STABILIZER (MOVING AVERAGE) ---
     pointHistory.push_back({x, y});
-    if (pointHistory.size() > smoothingWindow)
-    {
-        pointHistory.pop_front();
-    }
+    sumX += x;
+    sumY += y;
 
-    int avgX = 0;
-    int avgY = 0;
-    for (const auto &p : pointHistory)
-    {
-        avgX += p.first;
-        avgY += p.second;
-    }
-
-    // WATCH OUT! Cast the size_t to an int to preserve negative coordinates!
     int historyCount = static_cast<int>(pointHistory.size());
-    avgX /= historyCount;
-    avgY /= historyCount;
+    int avgX = sumX / historyCount;
+    int avgY = sumY / historyCount;
+
     // --------------------------------------
 
     manager.beginBatch();
@@ -74,8 +73,12 @@ void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, 
     int endMidY = (lastY + currentY) / 2;
 
     // 3. Distance calculation (still using float for std::sqrt, but casting result to int)
-    float dist1 = std::sqrt(std::pow(lastX - startMidX, 2) + std::pow(lastY - startMidY, 2));
-    float dist2 = std::sqrt(std::pow(endMidX - lastX, 2) + std::pow(endMidY - lastY, 2));
+    float dx1 = static_cast<float>(lastX - startMidX);
+    float dy1 = static_cast<float>(lastY - startMidY);
+    float dist1 = std::sqrt(dx1 * dx1 + dy1 * dy1);
+    float dx2 = static_cast<float>(currentX - endMidX);
+    float dy2 = static_cast<float>(currentY - endMidY);
+    float dist2 = std::sqrt(dx2 * dx2 + dy2 * dy2);
     // ==========================================
     // ADAPTIVE BEZIER STEPPING (The 10x Speedup)
     // ==========================================

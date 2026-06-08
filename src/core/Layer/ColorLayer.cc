@@ -7,8 +7,8 @@ void ColorLayer::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t
     if (x < 0 || x >= width || y < 0 || y >= height)
         return;
 
-    int tx = x / TILE_SIZE;
-    int ty = y / TILE_SIZE;
+    int tx = x >> TILE_BITS;
+    int ty = y >> TILE_BITS;
     int tileIdx = ty * tilesX + tx;
 
     if (!tiles[tileIdx])
@@ -16,9 +16,9 @@ void ColorLayer::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t
         tiles[tileIdx] = createTile();
     }
 
-    int lx = x % TILE_SIZE;
-    int ly = y % TILE_SIZE;
-    int pxIdx = (ly * TILE_SIZE + lx) * 4;
+    int lx = x & (TILE_SIZE - 1);
+    int ly = y & (TILE_SIZE - 1);
+    int pxIdx = ((ly << TILE_BITS) + lx) << 2; // Multiply by 4 (RGBA) via bitshift
 
     tiles[tileIdx]->data[pxIdx] = r;
     tiles[tileIdx]->data[pxIdx + 1] = g;
@@ -34,8 +34,8 @@ void ColorLayer::getPixel(int x, int y, uint8_t &r, uint8_t &g, uint8_t &b, uint
         return;
     }
 
-    int tx = x / TILE_SIZE;
-    int ty = y / TILE_SIZE;
+    int tx = x >> TILE_BITS; // x / TILE_SIZE
+    int ty = y >> TILE_BITS; // y / TILE_SIZE
     int tileIdx = ty * tilesX + tx;
 
     if (!tiles[tileIdx])
@@ -44,9 +44,9 @@ void ColorLayer::getPixel(int x, int y, uint8_t &r, uint8_t &g, uint8_t &b, uint
         return;
     }
 
-    int lx = x % TILE_SIZE;
-    int ly = y % TILE_SIZE;
-    int pxIdx = (ly * TILE_SIZE + lx) * 4;
+    int lx = x & (TILE_SIZE - 1);
+    int ly = y & (TILE_SIZE - 1);
+    int pxIdx = ((ly << TILE_BITS) + lx) << 2; // Multiply by 4 (RGBA) via bitshift
 
     r = tiles[tileIdx]->data[pxIdx];
     g = tiles[tileIdx]->data[pxIdx + 1];
