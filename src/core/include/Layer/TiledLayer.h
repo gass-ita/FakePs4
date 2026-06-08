@@ -5,8 +5,8 @@
 #include <vector>
 #include <memory>
 
-constexpr int TILE_BITS = 8;              // Because 2^8 = 256
-constexpr int TILE_SIZE = 1 << TILE_BITS; // 2^8 = 256
+constexpr int TILE_BITS = 6;              // Because 2^6 = 64
+constexpr int TILE_SIZE = 1 << TILE_BITS; // 2^6 = 64
 
 // Abstract Tile storage
 struct Tile
