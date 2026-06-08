@@ -530,3 +530,100 @@ void PressureBrushTool::onRelease(int x, int y, float pressure, float tiltX, flo
     // This ensures your UI slider stays accurate and the hover cursor goes back to normal.
     size = originalBaseSize;
 }
+
+// ==========================================
+// MASK BRUSH TOOL
+// ==========================================
+
+MaskBrushTool::MaskBrushTool(std::shared_ptr<MaskLayer> mask) : brushTip(mask) {}
+
+void MaskBrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
+{
+    if (!brushTip)
+        return;
+
+    // 1. Calculate the distance of this specific segment
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    float dist = std::sqrt(dx * dx + dy * dy);
+
+    // 2. Calculate "Brush Spacing" (How close the stamps are to each other)
+    // 10% to 15% of the brush radius makes a perfectly smooth, continuous line.
+    // If you set this higher (e.g., 100%), it will draw dotted lines!
+    float spacing = std::max(1.0f, static_cast<float>(size * 0.15f));
+
+    // 3. Figure out how many stamps we need to drop along this line
+    int steps = std::max(1, static_cast<int>(dist / spacing));
+
+    // 4. Drop the stamps!
+    for (int i = 0; i <= steps; ++i)
+    {
+        float t = static_cast<float>(i) / steps;
+        int cx = x0 + (dx * t);
+        int cy = y0 + (dy * t);
+
+        stampMask(cx, cy, manager);
+    }
+}
+
+void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)
+{
+    // 1. Lock the stamp dimensions to exactly 'size'
+    int stampDiameter = size;
+    if (stampDiameter <= 0)
+        stampDiameter = 1;
+
+    // 2. To center the stamp, we offset by half the size
+    int offset = stampDiameter / 2;
+    int startX = cx - offset;
+    int startY = cy - offset;
+
+    int maskW = brushTip->width;
+    int maskH = brushTip->height;
+
+    // 3. Loop over the bounding box of the stamp on the canvas
+    for (int y = 0; y < stampDiameter; ++y)
+    {
+        for (int x = 0; x < stampDiameter; ++x)
+        {
+            // NEAREST-NEIGHBOR SCALING
+            int maskX = (x * maskW) / stampDiameter;
+            int maskY = (y * maskH) / stampDiameter;
+
+            uint8_t mr, mg, mb, ma;
+            brushTip->getPixel(maskX, maskY, mr, mg, mb, ma);
+
+            // If the mask has ink here, blend it onto the canvas
+            if (ma > 0)
+            {
+                int canvasX = startX + x;
+                int canvasY = startY + y;
+
+                float normalizedMaskAlpha = ma / 255.0f;
+                float normalizedToolAlpha = a / 255.0f;
+                uint8_t finalAlpha = static_cast<uint8_t>(normalizedMaskAlpha * normalizedToolAlpha * 255.0f);
+
+                // --- STANDARD ALPHA BLENDING ---
+                uint8_t bgR, bgG, bgB, bgA;
+                manager.getPixel(canvasX, canvasY, bgR, bgG, bgB, bgA);
+
+                float alphaF = finalAlpha / 255.0f;
+                float invAlpha = 1.0f - alphaF;
+
+                uint8_t outR = static_cast<uint8_t>((r * alphaF) + (bgR * invAlpha));
+                uint8_t outG = static_cast<uint8_t>((g * alphaF) + (bgG * invAlpha));
+                uint8_t outB = static_cast<uint8_t>((b * alphaF) + (bgB * invAlpha));
+
+                // Keep the alpha ceiling at 255
+                uint8_t outA = std::min(255, bgA + finalAlpha);
+
+                manager.setPixel(canvasX, canvasY, outR, outG, outB, outA);
+            }
+        }
+    }
+}
+
+void MaskBrushTool::drawHoverCursor(int x, int y, LayerManager &manager)
+{
+    CircleOutline(x, y, size, 50, 50, 50, 255).draw(manager, &LayerManager::setPreviewPixel);
+}

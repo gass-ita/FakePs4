@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <chrono>
+#include <memory>
 
 class Tool
 {
@@ -114,6 +115,99 @@ private:
         float u = 1.0f - t;
         out = std::round((u * u * p0) + (2.0f * u * t * p1) + (t * t * p2));
     }
+};
+
+// ...
+
+class MaskBrushTool : public StrokeTool
+{
+private:
+    std::shared_ptr<MaskLayer> brushTip;
+
+    // The internal function that physically applies the mask to the canvas
+    void stampMask(int cx, int cy, LayerManager &manager);
+
+public:
+    // Pass the texture in when you create the tool!
+    MaskBrushTool(std::shared_ptr<MaskLayer> mask);
+
+#include <memory>
+#include <cmath>
+
+    // diameter: The total pixel size of the mask texture
+    // hardness: 0.0f (Airbrush) to 1.0f (Hard Pen)
+    static std::shared_ptr<MaskLayer> createRoundBrushMask(int diameter, float hardness = 0.8f)
+    {
+        // Ensure we don't try to create a 0-pixel mask
+        if (diameter < 1)
+            diameter = 1;
+
+        auto mask = std::make_shared<MaskLayer>(diameter, diameter, "BrushTip");
+
+        // The exact mathematical center of the texture
+        float cx = diameter / 2.0f;
+        float cy = diameter / 2.0f;
+        float radius = diameter / 2.0f;
+
+        // Calculate where the solid center ends, and the soft fade begins
+        float fadeStartRadius = radius * hardness;
+
+        // THE ANTI-ALIASING FIX:
+        // Even on a 100% hard brush, we MUST force at least 1 pixel of fade at the edge
+        // so the pixels seamlessly blend into the background instead of looking jagged.
+        if (radius - fadeStartRadius < 1.0f)
+        {
+            fadeStartRadius = std::max(0.0f, radius - 1.0f);
+        }
+
+        for (int y = 0; y < diameter; ++y)
+        {
+            for (int x = 0; x < diameter; ++x)
+            {
+
+                // Pro-Tip: Add 0.5 to measure from the absolute center of the pixel,
+                // preventing the circle from looking lopsided at very small sizes!
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+
+                // Calculate distance from center using the Pythagorean theorem
+                float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+                uint8_t alpha = 0;
+
+                if (dist <= fadeStartRadius)
+                {
+                    // 1. Inside the solid core
+                    alpha = 255;
+                }
+                else if (dist < radius)
+                {
+                    // 2. Inside the anti-aliased edge!
+                    // Calculate exactly how far along the gradient we are (0.0 to 1.0)
+                    float fadeLength = radius - fadeStartRadius;
+                    float distIntoFade = dist - fadeStartRadius;
+
+                    // Invert it so it goes from 1.0 (inside) to 0.0 (outside edge)
+                    float falloff = 1.0f - (distIntoFade / fadeLength);
+
+                    // Multiply by 255 to get the final alpha
+                    alpha = static_cast<uint8_t>(falloff * 255.0f);
+                }
+
+                // Write the pixel to the mask (Color parameters are 0 because they are ignored)
+                if (alpha > 0)
+                {
+                    mask->setPixel(x, y, 0, 0, 0, alpha);
+                }
+            }
+        }
+
+        return mask;
+    }
+
+protected:
+    void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) override;
+    void drawHoverCursor(int x, int y, LayerManager &manager) override;
 };
 
 class ColorPickerTool : public Tool

@@ -13,7 +13,7 @@ Canvas::Canvas(int canvasWidth, int canvasHeight, QWidget *parent)
     setMouseTracking(true); // Enable mouse move events even when no buttons are pressed
 
     // set the layer manager's tool to a default brush so we have a valid tool to call on hover before the user selects one
-    layerManager.setActiveTool(std::make_unique<PressureBrushTool>());
+    layerManager.setActiveTool(std::make_unique<MaskBrushTool>(MaskBrushTool::createRoundBrushMask(200, 0.8f)));
     layerManager.setToolSize(5);
     layerManager.setToolColor(255, 0, 0, 255);
 
