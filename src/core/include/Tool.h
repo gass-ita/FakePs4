@@ -95,7 +95,7 @@ protected:
     int sumX = 0;
     int sumY = 0;
 
-    short int smoothingWindow = 4; // the higher the smoother but more delay
+    short int smoothingWindow = 6; // the higher the smoother but more delay
     std::deque<std::pair<int, int>> pointHistory;
 
     // Pure virtual functions that child classes MUST implement

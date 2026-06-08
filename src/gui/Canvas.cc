@@ -3,6 +3,7 @@
 #include <QPainter>
 #include <QRect>
 #include "Shape.h"
+#include <iostream>
 
 Canvas::Canvas(QWidget *parent)
     : QWidget(parent), layerManager(3840, 2160) // Initialize LayerManager with canvas size
@@ -76,39 +77,30 @@ void Canvas::tabletEvent(QTabletEvent *event)
     float tiltX = event->xTilt();
     float tiltY = event->yTilt();
 
-    Tool *activeTool = layerManager.getActiveTool();
-    if (!activeTool)
+    if (!layerManager.getActiveTool())
         return;
-
-    // ==========================================
-    // THE ANTI-JITTER FILTER
-    // ==========================================
-    // A static variable remembers its value between function calls
-    static QPoint lastProcessedPos = QPoint(-1, -1);
 
     if (event->type() == QEvent::TabletPress)
     {
-        lastProcessedPos = imgPos;
+        // Tell the engine the pen touched the screen
         layerManager.onPress(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
-        update();
     }
     else if (event->type() == QEvent::TabletMove)
     {
+        // 1. Pass the movement data to the engine.
+        // (If the pen is just hovering, the Tool's internal 'if (!isDrawing)' check will safely ignore this!)
+        layerManager.onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
 
-        // ONLY do the heavy shape math if the pen physically moved to a new pixel!
-        if (imgPos != lastProcessedPos)
-        {
-            layerManager.onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
-            update();
-            lastProcessedPos = imgPos; // Save the new position
-        }
+        // 2. Always tell the engine where the pen is hovering so it can draw the cursor preview ring
+        layerManager.onHover(imgPos.x(), imgPos.y());
     }
     else if (event->type() == QEvent::TabletRelease)
     {
+        // Tell the engine the pen lifted
         layerManager.onRelease(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
-        update();
     }
 
+    // Accept the event so Qt doesn't fire a duplicate mouse event
     event->accept();
 }
 
@@ -124,6 +116,7 @@ void Canvas::mousePressEvent(QMouseEvent *event)
     // Left Mouse Button -> Pass to Tool
     else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
+        setCursor(Qt::CrossCursor); // Visual feedback for drawing
         QPoint imgPos = screenToImage(event->pos());
         layerManager.onPress(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f);
     }
@@ -132,23 +125,25 @@ void Canvas::mousePressEvent(QMouseEvent *event)
 void Canvas::mouseMoveEvent(QMouseEvent *event)
 {
     QPoint imgPos = screenToImage(event->pos());
-    // If panning
+    Tool *activeTool = layerManager.getActiveTool();
+
+    // 1. Panning (Canvas handles this because pan isn't part of the core image)
     if (isPanning)
     {
         QPoint delta = event->pos() - lastPanPos;
         panOffset += delta;
         lastPanPos = event->pos();
-        update(); // Request a full screen redraw to move the image
-    }
-    // If drawing
-    else if ((event->buttons() & Qt::LeftButton) && layerManager.getActiveTool())
-    {
-        layerManager.onMove(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f);
-        update();
+        update(); // Canvas must update itself when panning
+        return;
     }
 
-    // Always update the hover preview (even if no buttons are pressed)
-    if (layerManager.getActiveTool())
+    // 2. Pass data to the Core (Let the core trigger onRegionChanged!)
+    if ((event->buttons() & Qt::LeftButton) && activeTool)
+    {
+        layerManager.onMove(imgPos.x(), imgPos.y(), 1.0f, 0.0f, 0.0f);
+    }
+
+    if (activeTool)
     {
         layerManager.onHover(imgPos.x(), imgPos.y());
     }
@@ -156,10 +151,10 @@ void Canvas::mouseMoveEvent(QMouseEvent *event)
 
 void Canvas::mouseReleaseEvent(QMouseEvent *event)
 {
+    unsetCursor();
     if (event->button() == Qt::MiddleButton)
     {
         isPanning = false;
-        unsetCursor();
     }
     else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
