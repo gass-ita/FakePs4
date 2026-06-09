@@ -181,6 +181,11 @@ void ShapeTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, 
     startX = x;
     startY = y;
     isDrawing = true;
+
+    static int lastX = -1;
+    static int lastY = -1;
+    lastX = x;
+    lastY = y;
 }
 
 void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
@@ -188,8 +193,16 @@ void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, L
     if (!isDrawing)
         return;
 
+    static int lastX = -1;
+    static int lastY = -1;
+    if (x == lastX && y == lastY)
+        return;
+
     if (!shouldProcessMove())
         return;
+
+    lastX = x;
+    lastY = y;
 
     manager.clearPreview();
     drawShapePreview(startX, startY, x, y, manager);
@@ -221,14 +234,18 @@ void RectangleTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManage
 
     if (w > 0 && h > 0)
     {
-        Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
-        int p = size;
-        manager.addPreviewDirtyRect(rx - p, ry - p, w + (p * 2), size + (p * 2));
-        manager.addPreviewDirtyRect(rx - p, (ry + h) - size - p, w + (p * 2), size + (p * 2));
-        manager.addPreviewDirtyRect(rx - p, ry - p, size + (p * 2), h + (p * 2));
-        manager.addPreviewDirtyRect((rx + w) - size - p, ry - p, size + (p * 2), h + (p * 2));
+        // 1. Instantiating and rendering the 4 lines directly on the stack
+        Line(rx, ry, rx + w, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);         // Top Edge
+        Line(rx + w, ry, rx + w, ry + h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel); // Right Edge
+        Line(rx + w, ry + h, rx, ry + h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel); // Bottom Edge
+        Line(rx, ry + h, rx, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);         // Left Edge
+
+        // 2. Submit the single optimized bounding box for the entire preview rectangle
+        int pad = size + 2;
+        manager.addPreviewDirtyRect(rx - pad, ry - pad, w + (pad * 2), h + (pad * 2));
     }
 }
+
 void RectangleTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager)
 {
     int rx = std::min(sx, cx);
@@ -238,12 +255,15 @@ void RectangleTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager 
 
     if (w > 0 && h > 0)
     {
-        Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager);
-        int p = size;
-        manager.addDirtyRect(rx - p, ry - p, w + (p * 2), size + (p * 2));
-        manager.addDirtyRect(rx - p, (ry + h) - size - p, w + (p * 2), size + (p * 2));
-        manager.addDirtyRect(rx - p, ry - p, size + (p * 2), h + (p * 2));
-        manager.addDirtyRect((rx + w) - size - p, ry - p, size + (p * 2), h + (p * 2));
+        // 1. Permanently draw the 4 lines directly to the target layer memory
+        Line(rx, ry, rx + w, ry, r, g, b, a, size).draw(manager);         // Top Edge
+        Line(rx + w, ry, rx + w, ry + h, r, g, b, a, size).draw(manager); // Right Edge
+        Line(rx + w, ry + h, rx, ry + h, r, g, b, a, size).draw(manager); // Bottom Edge
+        Line(rx, ry + h, rx, ry, r, g, b, a, size).draw(manager);         // Left Edge
+
+        // 2. Submit the single optimized bounding box to update the permanent viewport tiles
+        int pad = size + 2;
+        manager.addDirtyRect(rx - pad, ry - pad, w + (pad * 2), h + (pad * 2));
     }
 }
 

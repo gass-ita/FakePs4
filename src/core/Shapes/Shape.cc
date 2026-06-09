@@ -36,33 +36,100 @@ void Line::draw(LayerManager &manager, PixelSetter setter) const
             }
         }
     }
+    // ==============================================================================
+    // OPTIMIZATION: PURE INTEGER HORIZONTAL FAST-PATH
+    // ==============================================================================
+    else if (y0 == y1)
+    {
+        int radius = thickness / 2;
+        int radiusSquared = radius * radius;
+        int min_x = std::min(x0, x1);
+        int max_x = std::max(x0, x1);
+
+        int minX = min_x - radius;
+        int maxX = max_x + radius;
+        int minY = y0 - radius;
+        int maxY = y0 + radius;
+
+        for (int y = minY; y <= maxY; ++y)
+        {
+            int dy_pt = y - y0;
+            int dySq = dy_pt * dy_pt;
+            for (int x = minX; x <= maxX; ++x)
+            {
+                int distSquared;
+                if (x < min_x)
+                {
+                    int dx_pt = x - min_x;
+                    distSquared = dx_pt * dx_pt + dySq;
+                }
+                else if (x > max_x)
+                {
+                    int dx_pt = x - max_x;
+                    distSquared = dx_pt * dx_pt + dySq;
+                }
+                else
+                {
+                    distSquared = dySq;
+                }
+
+                if (distSquared <= radiusSquared)
+                    (manager.*setter)(x, y, r, g, b, a);
+            }
+        }
+    }
+    // ==============================================================================
+    // OPTIMIZATION: PURE INTEGER VERTICAL FAST-PATH
+    // ==============================================================================
+    else if (x0 == x1)
+    {
+        int radius = thickness / 2;
+        int radiusSquared = radius * radius;
+        int min_y = std::min(y0, y1);
+        int max_y = std::max(y0, y1);
+
+        int minX = x0 - radius;
+        int maxX = x0 + radius;
+        int minY = min_y - radius;
+        int maxY = max_y + radius;
+
+        for (int y = minY; y <= maxY; ++y)
+        {
+            int dy_pt = 0;
+            if (y < min_y)
+                dy_pt = y - min_y;
+            else if (y > max_y)
+                dy_pt = y - max_y;
+
+            int dySq = dy_pt * dy_pt;
+            for (int x = minX; x <= maxX; ++x)
+            {
+                int dx_pt = x - x0;
+                int distSquared = dx_pt * dx_pt + dySq;
+
+                if (distSquared <= radiusSquared)
+                    (manager.*setter)(x, y, r, g, b, a);
+            }
+        }
+    }
     else
     {
-        // ==========================================
-        // PRO SOFTWARE RENDERING (Zero Overdraw)
-        // ==========================================
+        // Fallback for complex angled thick lines (Capsule math)
         int radius = thickness / 2;
         float radiusSquared = static_cast<float>(radius * radius);
 
-        // 1. Calculate the bounding box of the entire capsule shape
         int minX = std::min(x0, x1) - radius;
         int maxX = std::max(x0, x1) + radius;
         int minY = std::min(y0, y1) - radius;
         int maxY = std::max(y0, y1) + radius;
 
-        // Pre-calculate line segment vector lengths for math speed
-        // Pre-calculate line segment vector lengths
         float dx_line = static_cast<float>(x1 - x0);
         float dy_line = static_cast<float>(y1 - y0);
         float lineLengthSquared = (dx_line * dx_line) + (dy_line * dy_line);
-
-        // 1. PRE-CALCULATE INVERSE LENGTH to avoid division inside the loop
         float invLengthSq = (lineLengthSquared > 0.0f) ? (1.0f / lineLengthSquared) : 0.0f;
 
-        // 2. Iterate through the bounding box
         for (int y = minY; y <= maxY; ++y)
         {
-            // HOIST CONSTANT Y-MATH: Calculate this once per row, not per pixel
             float dy_base = static_cast<float>(y - y0);
             float y_term = dy_base * dy_line;
 
@@ -73,15 +140,11 @@ void Line::draw(LayerManager &manager, PixelSetter setter) const
 
                 if (lineLengthSquared == 0.0f)
                 {
-                    // Single dot (clicked without dragging)
                     distSquared = (dx_base * dx_base) + (dy_base * dy_base);
                 }
                 else
                 {
-                    // 3. MULTIPLY instead of divide for extreme speed
                     float t = (dx_base * dx_line + y_term) * invLengthSq;
-
-                    // 4. Fast clamp (slightly faster than std::max/min)
                     t = (t < 0.0f) ? 0.0f : ((t > 1.0f) ? 1.0f : t);
 
                     float closestX = x0 + t * dx_line;
@@ -92,11 +155,8 @@ void Line::draw(LayerManager &manager, PixelSetter setter) const
                     distSquared = (dx_pt * dx_pt) + (dy_pt * dy_pt);
                 }
 
-                // 5. If within radius, draw it
                 if (distSquared <= radiusSquared)
-                {
                     (manager.*setter)(x, y, r, g, b, a);
-                }
             }
         }
     }
