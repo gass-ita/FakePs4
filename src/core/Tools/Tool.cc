@@ -167,6 +167,8 @@ void ShapeTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, 
     manager.clearPreview();
     startX = x;
     startY = y;
+    lastX = x;
+    lastY = y;
 
     isDrawing = true;
 }
@@ -175,6 +177,14 @@ void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, L
 {
     if (!isDrawing)
         return;
+
+    // dont redraw if its in the same pixel
+    if (x == lastX && y == lastY)
+        return;
+
+    lastX = x;
+    lastY = y;
+
     if (!shouldProcessMove())
         return;
 
@@ -192,6 +202,9 @@ void ShapeTool::onRelease(int x, int y, float pressure, float tiltX, float tiltY
     manager.beginBatch();
     drawShapeFinal(startX, startY, x, y, manager);
     manager.endBatch();
+
+    lastX = -1;
+    lastY = -1;
 
     isDrawing = false;
 }

@@ -228,6 +228,8 @@ protected:
     bool isDrawing = false;
     int startX = 0;
     int startY = 0;
+    int lastX = -1;
+    int lastY = -1;
 
     // Pure virtual functions that child classes MUST implement
     virtual void drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;
