@@ -31,6 +31,9 @@ void LayerManager::addLayer(const std::string &name, Layer::Type type)
         layers.push_back(std::make_shared<ColorLayer>(width, height, name));
         break;
     }
+
+    for (auto *observer : observers)
+        observer->onLayerListChanged();
 }
 
 void LayerManager::addObserver(LMObserver *observer)
@@ -87,6 +90,9 @@ void LayerManager::setActiveLayer(size_t index)
     {
         activeLayerIndex = index;
     }
+
+    for (auto *observer : observers)
+        observer->onLayerListChanged();
 }
 
 void LayerManager::setPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
@@ -140,78 +146,76 @@ void LayerManager::updateCache(int startX, int startY, int rWidth, int rHeight)
     if (x1 <= x0 || y1 <= y0)
         return;
 
+    // Allocated ONCE for the entire call. clear() inside the loop
+    // reuses this memory without touching the heap again.
+    std::vector<std::pair<const uint8_t *, float>> activeTiles;
+    activeTiles.reserve(layers.size());
+
     for (int y = y0; y < y1; ++y)
     {
-        int ty = y / TILE_SIZE;     // The Y coordinate on the tile grid
-        int localY = y % TILE_SIZE; // The Y coordinate strictly inside the 64x64 tile
+        int ty = y >> TILE_BITS;          // y / TILE_SIZE
+        int localY = y & (TILE_SIZE - 1); // y % TILE_SIZE
 
         for (int x = x0; x < x1;)
         {
-            int tx = x / TILE_SIZE;     // The X coordinate on the tile grid
-            int localX = x % TILE_SIZE; // The X coordinate strictly inside the 64x64 tile
+            int tx = x >> TILE_BITS;          // x / TILE_SIZE
+            int localX = x & (TILE_SIZE - 1); // x % TILE_SIZE
 
-            // Calculate how many pixels we can process before we cross into the next 64x64 tile
             int pixelsToProcess = std::min(x1 - x, TILE_SIZE - localX);
 
-            // 1. GATHER PHASE: Get raw memory pointers for this specific 64x64 block
-            std::vector<std::pair<const uint8_t *, float>> activeTiles;
-
-            // Pre-allocate memory to avoid reallocations in the loop
-            activeTiles.reserve(layers.size());
+            // ── GATHER PHASE ─────────────────────────────────────────────
+            // Reuse the vector allocation from above — no heap activity.
+            activeTiles.clear();
 
             for (const auto &layer : layers)
             {
                 if (!layer->visible)
                     continue;
 
-                // Grab the raw pointer. If the tile is empty, this returns nullptr.
                 const Tile *tile = layer->getTile(tx, ty);
-
                 if (tile != nullptr)
-                {
                     activeTiles.push_back({tile->data.data(), layer->opacity});
-                }
             }
 
-            // 2. COMPOSITE PHASE: Loop through the chunk using the raw arrays
+            // ── COMPOSITE PHASE ──────────────────────────────────────────
+            // Hoist the row-base index out of the pixel loop.
+            // globalRowBase advances by 4 each pixel, so no multiply inside.
+            int globalRowBase = (y * width + x) * 4;
+
+            // localTileBase is the flat index of pixel (localX, localY)
+            // inside the 64×64 tile. Also advances by 4 each pixel.
+            int localTileBase = (localY * TILE_SIZE + localX) * 4;
+
             for (int i = 0; i < pixelsToProcess; ++i)
             {
-                int currentX = x + i;
-                int globalIdx = (y * width + currentX) * 4;
+                uint8_t &outR = projectionCache[globalRowBase];
+                uint8_t &outG = projectionCache[globalRowBase + 1];
+                uint8_t &outB = projectionCache[globalRowBase + 2];
+                uint8_t &outA = projectionCache[globalRowBase + 3];
 
-                // Calculate the exact index inside the 64x64 flat tile vector
-                int localTileIdx = (localY * TILE_SIZE + (localX + i)) * 4;
-
-                uint8_t &outR = projectionCache[globalIdx];
-                uint8_t &outG = projectionCache[globalIdx + 1];
-                uint8_t &outB = projectionCache[globalIdx + 2];
-                uint8_t &outA = projectionCache[globalIdx + 3];
-
-                // Reset cache pixel to transparent
-                outR = 0;
-                outG = 0;
-                outB = 0;
-                outA = 0;
+                outR = outG = outB = outA = 0;
 
                 for (const auto &activeTile : activeTiles)
                 {
                     const uint8_t *tileData = activeTile.first;
                     float opacity = activeTile.second;
 
-                    // Direct memory access. No virtual function overhead!
-                    uint8_t tr = tileData[localTileIdx];
-                    uint8_t tg = tileData[localTileIdx + 1];
-                    uint8_t tb = tileData[localTileIdx + 2];
-                    uint8_t ta = tileData[localTileIdx + 3];
+                    uint8_t ta = tileData[localTileBase + 3];
+                    if (ta == 0)
+                        continue;
 
-                    if (ta > 0)
-                    {
-                        blendPixels(outR, outG, outB, outA, tr, tg, tb, ta, opacity);
-                    }
+                    blendPixels(outR, outG, outB, outA,
+                                tileData[localTileBase],
+                                tileData[localTileBase + 1],
+                                tileData[localTileBase + 2],
+                                ta, opacity);
                 }
+
+                // Advance both indices by one RGBA pixel
+                globalRowBase += 4;
+                localTileBase += 4;
             }
 
-            // 3. Jump forward by the chunk size we just processed
             x += pixelsToProcess;
         }
     }

@@ -315,50 +315,64 @@ void EllipseTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &m
 // ==========================================
 void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
 {
-    manager.clearPreview();
+    const int W = manager.getWidth();
+    const int H = manager.getHeight();
 
-    if (x < 0 || x >= manager.getWidth() || y < 0 || y >= manager.getHeight())
+    if (x < 0 || x >= W || y < 0 || y >= H)
         return;
 
+    // Sample the target color at the click point
     uint8_t tr, tg, tb, ta;
     manager.getPixel(x, y, tr, tg, tb, ta);
 
+    // If already the fill color, do nothing
     if (tr == r && tg == g && tb == b && ta == a)
         return;
 
     manager.beginBatch();
 
-    std::vector<std::pair<int, int>> stack;
-    stack.push_back({x, y});
+    // Visited bitset: one bit per pixel, zero-initialised.
+    // Uses ~26 KB for 1920×1080 — trivial stack/heap cost.
+    std::vector<bool> visited(W * H, false);
 
-    int minX = x, minY = y, maxX = x, maxY = y;
+    int minX = x, maxX = x, minY = y, maxY = y;
+
+    std::vector<std::pair<int, int>> stack;
+    stack.reserve(1024);
+    stack.push_back({x, y});
+    visited[y * W + x] = true;
 
     while (!stack.empty())
     {
         auto [cx, cy] = stack.back();
         stack.pop_back();
 
-        uint8_t cr, cg, cb, ca;
+        // Scan left
         int lx = cx;
-
-        while (lx >= 0)
+        while (lx > 0)
         {
-            manager.getPixel(lx, cy, cr, cg, cb, ca);
+            uint8_t cr, cg, cb, ca;
+            manager.getPixel(lx - 1, cy, cr, cg, cb, ca);
             if (cr != tr || cg != tg || cb != tb || ca != ta)
                 break;
-            lx--;
+            --lx;
+            // Mark visited immediately so it's never re-seeded
+            if (!visited[cy * W + lx])
+                visited[cy * W + lx] = true;
         }
-        lx++;
 
+        // Scan right
         int rx = cx;
-        while (rx < manager.getWidth())
+        while (rx < W - 1)
         {
-            manager.getPixel(rx, cy, cr, cg, cb, ca);
+            uint8_t cr, cg, cb, ca;
+            manager.getPixel(rx + 1, cy, cr, cg, cb, ca);
             if (cr != tr || cg != tg || cb != tb || ca != ta)
                 break;
-            rx++;
+            ++rx;
+            if (!visited[cy * W + rx])
+                visited[cy * W + rx] = true;
         }
-        rx--;
 
         minX = std::min(minX, lx);
         maxX = std::max(maxX, rx);
@@ -372,28 +386,34 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
         {
             manager.setPixel(i, cy, r, g, b, a);
 
+            // Seed above — only if not yet visited
             if (cy > 0)
             {
+                uint8_t cr, cg, cb, ca;
                 manager.getPixel(i, cy - 1, cr, cg, cb, ca);
                 bool match = (cr == tr && cg == tg && cb == tb && ca == ta);
 
-                if (match && !spanAbove)
+                if (match && !spanAbove && !visited[(cy - 1) * W + i])
                 {
                     stack.push_back({i, cy - 1});
+                    visited[(cy - 1) * W + i] = true;
                     spanAbove = true;
                 }
                 else if (!match)
                     spanAbove = false;
             }
 
-            if (cy < manager.getHeight() - 1)
+            // Seed below — only if not yet visited
+            if (cy < H - 1)
             {
+                uint8_t cr, cg, cb, ca;
                 manager.getPixel(i, cy + 1, cr, cg, cb, ca);
                 bool match = (cr == tr && cg == tg && cb == tb && ca == ta);
 
-                if (match && !spanBelow)
+                if (match && !spanBelow && !visited[(cy + 1) * W + i])
                 {
                     stack.push_back({i, cy + 1});
+                    visited[(cy + 1) * W + i] = true;
                     spanBelow = true;
                 }
                 else if (!match)
@@ -405,7 +425,6 @@ void FillTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, L
     manager.addDirtyRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
     manager.endBatch();
 }
-
 // ==========================================
 // TOOL DECORATORS
 // ==========================================
@@ -443,8 +462,6 @@ void PressureSizeDecorator::onRelease(int x, int y, float pressure, float tiltX,
         return;
 
     wrappedTool->onRelease(x, y, pressure, tiltX, tiltY, manager);
-
-    // 4. SNAP BACK! Restore the original UI size.
     wrappedTool->size = originalBaseSize;
 }
 
@@ -507,6 +524,51 @@ void MaskBrushTool::onPress(int x, int y, float pressure, float tiltX, float til
     StrokeTool::onPress(x, y, pressure, tiltX, tiltY, manager);
 }
 
+std::shared_ptr<MaskLayer> MaskBrushTool::createRoundBrushMask(int diameter, float hardness)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "BrushTip");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f;
+    float fadeStartRadius = radius * hardness;
+
+    if (radius - fadeStartRadius < 1.0f)
+        fadeStartRadius = std::max(0.0f, radius - 1.0f);
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            uint8_t alpha = 0;
+
+            if (dist <= fadeStartRadius)
+            {
+                alpha = 255;
+            }
+            else if (dist < radius)
+            {
+                float fadeLength = radius - fadeStartRadius;
+                float distIntoFade = dist - fadeStartRadius;
+                float falloff = 1.0f - (distIntoFade / fadeLength);
+                alpha = static_cast<uint8_t>(falloff * 255.0f);
+            }
+
+            if (alpha > 0)
+                mask->setPixel(x, y, 0, 0, 0, alpha);
+        }
+    }
+
+    return mask;
+}
+
 void MaskBrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
 {
     if (!brushTip)
@@ -564,43 +626,55 @@ void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)
     int maskW = brushTip->width;
     int maskH = brushTip->height;
 
+    // ── Hoist 1: tool alpha is constant for the entire stamp ──────────────
+    // Old code recomputed (a / 255.0f) inside the inner loop, every pixel.
+    const float toolAlphaNorm = a / 255.0f;
+
     for (int y = 0; y < stampDiameter; ++y)
     {
+        // ── Hoist 2: mask Y lookup is constant for the whole row ──────────
+        int maskY = (y * maskH) / stampDiameter;
+
         for (int x = 0; x < stampDiameter; ++x)
         {
             int maskX = (x * maskW) / stampDiameter;
-            int maskY = (y * maskH) / stampDiameter;
 
             uint8_t mr, mg, mb, ma;
             brushTip->getPixel(maskX, maskY, mr, mg, mb, ma);
 
-            if (ma > 0)
-            {
-                int canvasX = startX + x;
-                int canvasY = startY + y;
+            if (ma == 0)
+                continue; // transparent mask pixel — skip entirely
 
-                float normalizedMaskAlpha = ma / 255.0f;
-                float normalizedToolAlpha = a / 255.0f;
-                uint8_t finalAlpha = static_cast<uint8_t>(normalizedMaskAlpha * normalizedToolAlpha * 255.0f);
+            int canvasX = startX + x;
+            int canvasY = startY + y;
 
-                uint8_t bgR, bgG, bgB, bgA;
-                manager.getPixel(canvasX, canvasY, bgR, bgG, bgB, bgA);
+            // ── Opt 3: collapse three float ops into one ───────────────────
+            // Old: normalizedMaskAlpha = ma/255  →  normalizedToolAlpha = a/255
+            //      finalAlpha = normalizedMaskAlpha * normalizedToolAlpha * 255
+            // New: toolAlphaNorm is already divided once; one multiply left.
+            const float maskAlphaNorm = ma / 255.0f;
+            const uint8_t finalAlpha = static_cast<uint8_t>(maskAlphaNorm * toolAlphaNorm * 255.0f);
 
-                float alphaF = finalAlpha / 255.0f;
-                float invAlpha = 1.0f - alphaF;
+            if (finalAlpha == 0)
+                continue; // guard for rounding to zero
 
-                uint8_t outR = static_cast<uint8_t>((r * alphaF) + (bgR * invAlpha));
-                uint8_t outG = static_cast<uint8_t>((g * alphaF) + (bgG * invAlpha));
-                uint8_t outB = static_cast<uint8_t>((b * alphaF) + (bgB * invAlpha));
+            // Read the canvas pixel under the stamp
+            uint8_t bgR, bgG, bgB, bgA;
+            manager.getPixel(canvasX, canvasY, bgR, bgG, bgB, bgA);
 
-                uint8_t outA = std::min(255, bgA + finalAlpha);
+            // Alpha-blend: out = src * alpha + dst * (1 - alpha)
+            const float alphaF = finalAlpha / 255.0f;
+            const float invAlpha = 1.0f - alphaF;
 
-                manager.setPixel(canvasX, canvasY, outR, outG, outB, outA);
-            }
+            const uint8_t outR = static_cast<uint8_t>(r * alphaF + bgR * invAlpha);
+            const uint8_t outG = static_cast<uint8_t>(g * alphaF + bgG * invAlpha);
+            const uint8_t outB = static_cast<uint8_t>(b * alphaF + bgB * invAlpha);
+            const uint8_t outA = static_cast<uint8_t>(std::min(255, bgA + finalAlpha));
+
+            manager.setPixel(canvasX, canvasY, outR, outG, outB, outA);
         }
     }
 }
-
 void MaskBrushTool::drawHoverCursor(int x, int y, LayerManager &manager)
 {
     CircleOutline(x, y, size, 50, 50, 50, 255).draw(manager, &LayerManager::setPreviewPixel);

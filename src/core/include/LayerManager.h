@@ -8,7 +8,6 @@
 #include <memory>
 #include <cstdint>
 #include <string>
-#include <memory>
 #include <unordered_set>
 #include "Filter.h"
 

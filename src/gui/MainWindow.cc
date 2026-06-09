@@ -530,32 +530,33 @@ MainWindow::MainWindow(int canvasWidth, int canvasHeight, const QString &filePat
                 connect(watcher, &QFutureWatcher<void>::finished, this, [this, progress, watcher]() {
                     progress->close();
                     watcher->deleteLater();
-                    
-                    LayerManager& manager = canvas->getLayerManager();
-                    manager.addDirtyRect(0, 0, manager.getWidth(), manager.getHeight());
-                    canvas->update(); 
                 });
 
-                // Pass engineIndex to the background thread!
-                QFuture<void> future = QtConcurrent::run([this, engineIndex, filterType, size, sigma, intensity, blend, bright, contrast]() {
-                    
-                    std::unique_ptr<Filter> activeFilter;
+                QFuture<void> future = QtConcurrent::run([this, engineIndex, filterType, size, sigma, intensity, blend, bright, contrast]()
+                                                         {
 
-                    switch(filterType) {
-                        case 0: activeFilter = std::make_unique<GaussianBlurFilter>(size, sigma); break;
-                        case 1: activeFilter = std::make_unique<SharpenFilter>(intensity); break;
-                        case 2: activeFilter = std::make_unique<EdgeDetectionFilter>(intensity); break;
-                        case 3: activeFilter = std::make_unique<EmbossFilter>(intensity); break;
-                        case 4: activeFilter = std::make_unique<InvertFilter>(blend); break;
-                        case 5: activeFilter = std::make_unique<GrayscaleFilter>(blend); break;
-                        case 6: activeFilter = std::make_unique<BrightnessContrastFilter>(bright, contrast); break;
-                    }
+    std::unique_ptr<Filter> activeFilter;
 
-                    // Apply the math to the mathematically correct layer
-                    if (activeFilter) {
-                        activeFilter->apply(this->canvas->getLayerManager().getLayers()[engineIndex].get());
-                    }
-                });
+    switch(filterType) {
+        case 0: activeFilter = std::make_unique<GaussianBlurFilter>(size, sigma); break;
+        case 1: activeFilter = std::make_unique<SharpenFilter>(intensity); break;
+        case 2: activeFilter = std::make_unique<EdgeDetectionFilter>(intensity); break;
+        case 3: activeFilter = std::make_unique<EmbossFilter>(intensity); break;
+        case 4: activeFilter = std::make_unique<InvertFilter>(blend); break;
+        case 5: activeFilter = std::make_unique<GrayscaleFilter>(blend); break;
+        case 6: activeFilter = std::make_unique<BrightnessContrastFilter>(bright, contrast); break;
+    }
+
+    // Route through applyFilter() so beginBatch/endBatch and cache
+    // invalidation run correctly. The active layer index must match
+    // engineIndex, so we temporarily switch it, apply, then restore.
+    if (activeFilter) {
+        LayerManager &manager = this->canvas->getLayerManager();
+        size_t previousIndex = manager.getActiveLayerIndex();
+        manager.setActiveLayer(engineIndex);
+        manager.applyFilter(*activeFilter);      // ← goes through the public API
+        manager.setActiveLayer(previousIndex);   // restore what the user had selected
+    } });
 
                 watcher->setFuture(future);
                 dialog.accept(); });
