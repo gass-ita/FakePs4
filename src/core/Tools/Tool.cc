@@ -177,16 +177,14 @@ void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, L
 {
     if (!isDrawing)
         return;
-
-    // dont redraw if its in the same pixel
     if (x == lastX && y == lastY)
         return;
 
+    if (!shouldProcessMove())
+        return; // ← sposta qui, PRIMA di aggiornare lastX/lastY
+
     lastX = x;
     lastY = y;
-
-    if (!shouldProcessMove())
-        return;
 
     manager.clearPreview();
     drawShapePreview(startX, startY, x, y, manager);

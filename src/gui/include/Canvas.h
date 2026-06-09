@@ -71,7 +71,7 @@ private:
     std::vector<uint8_t> frameBuffer;
 
     QPoint lastPos;
-
+    bool tabletActive = false;
     float zoom = 1.0f;
     QPointF panOffset = QPointF(0, 0);
 

@@ -12,7 +12,7 @@ class Tool
 {
 protected:
     virtual bool requiresHighFrequency() const { return true; }
-    short int throttleMs = 32;        // lowfreq tools
+    short int throttleMs = 16;        // lowfreq tools
     short int highFreqThrottleMs = 5; // highfreq tools (like the brush) can skip throttling altogether for maximum responsiveness
     std::chrono::steady_clock::time_point lastTime;
 

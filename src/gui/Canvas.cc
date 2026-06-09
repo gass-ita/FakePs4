@@ -72,41 +72,38 @@ void Canvas::onRegionChanged(int x, int y, int w, int h)
 void Canvas::tabletEvent(QTabletEvent *event)
 {
     QPoint imgPos = screenToImage(event->position().toPoint());
-
     float pressure = event->pressure();
     float tiltX = event->xTilt();
     float tiltY = event->yTilt();
 
     if (!layerManager.getActiveTool())
+    {
+        event->accept();
         return;
+    }
 
     if (event->type() == QEvent::TabletPress)
     {
-        // Tell the engine the pen touched the screen
+        tabletActive = true; // ← nuovo flag di classe
         layerManager.onPress(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
-
-        setCursor(Qt::CrossCursor); // Visual feedback for drawing
+        setCursor(Qt::CrossCursor);
     }
     else if (event->type() == QEvent::TabletMove)
     {
-        // 1. Pass the movement data to the engine.
-        // (If the pen is just hovering, the Tool's internal 'if (!isDrawing)' check will safely ignore this!)
-        layerManager.onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
-
-        // 2. Always tell the engine where the pen is hovering so it can draw the cursor preview ring
-        layerManager.onHover(imgPos.x(), imgPos.y());
+        if (pressure > 0.0f)
+            layerManager.onMove(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
+        else
+            layerManager.onHover(imgPos.x(), imgPos.y()); // hovering, penna sollevata
     }
     else if (event->type() == QEvent::TabletRelease)
     {
-        // Tell the engine the pen lifted
+        tabletActive = false; // ← reset flag
         unsetCursor();
         layerManager.onRelease(imgPos.x(), imgPos.y(), pressure, tiltX, tiltY);
     }
 
-    // Accept the event so Qt doesn't fire a duplicate mouse event
     event->accept();
 }
-
 void Canvas::mousePressEvent(QMouseEvent *event)
 {
     // Middle Mouse Button -> Start Panning
