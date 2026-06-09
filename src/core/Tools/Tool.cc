@@ -43,6 +43,8 @@ void StrokeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, 
 {
     if (!isDrawing)
         return;
+    if (!shouldProcessMove())
+        return;
 
     sumX -= pointHistory.front().first;
     sumY -= pointHistory.front().second;
@@ -165,6 +167,7 @@ void ShapeTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, 
     manager.clearPreview();
     startX = x;
     startY = y;
+
     isDrawing = true;
 }
 
@@ -484,6 +487,15 @@ void ConeGrowthDecorator::onRelease(int x, int y, float pressure, float tiltX, f
 
 MaskBrushTool::MaskBrushTool(std::shared_ptr<MaskLayer> mask) : brushTip(mask) {}
 
+void MaskBrushTool::onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager)
+{
+    // Reset the math for a brand new brush stroke
+    distanceAccumulator = 0.0f;
+
+    // Let the base class set up the Bezier arrays
+    StrokeTool::onPress(x, y, pressure, tiltX, tiltY, manager);
+}
+
 void MaskBrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
 {
     if (!brushTip)
@@ -493,17 +505,39 @@ void MaskBrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager
     float dy = y1 - y0;
     float dist = std::sqrt(dx * dx + dy * dy);
 
-    float spacing = std::max(1.0f, static_cast<float>(size * 0.15f));
-    int steps = std::max(1, static_cast<int>(dist / spacing));
-
-    for (int i = 0; i <= steps; ++i)
+    // If it is the very first dot of a mouse click, stamp it immediately!
+    if (dist == 0.0f && distanceAccumulator == 0.0f)
     {
-        float t = static_cast<float>(i) / steps;
+        stampMask(x0, y0, manager);
+        return;
+    }
+
+    float spacing = std::max(1.0f, static_cast<float>(size * 0.15f));
+
+    // Track how much of THIS specific micro-segment we have traveled
+    float segmentTraveled = 0.0f;
+
+    // While we have built up enough total distance to drop a stamp...
+    while ((distanceAccumulator + dist - segmentTraveled) >= spacing)
+    {
+        // Find out how many pixels into this segment the stamp belongs
+        float distanceToNextStamp = spacing - distanceAccumulator;
+        segmentTraveled += distanceToNextStamp;
+
+        // Convert that distance into a percentage (0.0 to 1.0) to find the X/Y
+        float t = segmentTraveled / dist;
         int cx = x0 + (dx * t);
         int cy = y0 + (dy * t);
 
         stampMask(cx, cy, manager);
+
+        // We just dropped a stamp, so reset the accumulator!
+        distanceAccumulator = 0.0f;
     }
+
+    // Add whatever fractional distance is left over to the accumulator
+    // so it flawlessly carries over into the next Bezier segment!
+    distanceAccumulator += (dist - segmentTraveled);
 }
 
 void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)

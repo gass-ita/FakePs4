@@ -12,8 +12,8 @@ class Tool
 {
 protected:
     virtual bool requiresHighFrequency() const { return true; }
-    short int throttleMs = 16;        // lowfreq tools
-    short int highFreqThrottleMs = 0; // highfreq tools (like the brush) can skip throttling altogether for maximum responsiveness
+    short int throttleMs = 32;        // lowfreq tools
+    short int highFreqThrottleMs = 5; // highfreq tools (like the brush) can skip throttling altogether for maximum responsiveness
     std::chrono::steady_clock::time_point lastTime;
 
 public:
@@ -124,12 +124,15 @@ class MaskBrushTool : public StrokeTool
 private:
     std::shared_ptr<MaskLayer> brushTip;
 
+    float distanceAccumulator = 0.0f;
+
     // The internal function that physically applies the mask to the canvas
     void stampMask(int cx, int cy, LayerManager &manager);
 
 public:
     // Pass the texture in when you create the tool!
     MaskBrushTool(std::shared_ptr<MaskLayer> mask);
+    void onPress(int x, int y, float pressure, float tiltX, float tiltY, LayerManager &manager) override;
 
 #include <memory>
 #include <cmath>
