@@ -118,13 +118,17 @@ void ShapeGroup::draw(LayerManager &manager, PixelSetter setter) const
 }
 
 // --- Rectangle ---
-Rectangle::Rectangle(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a, int thickness)
+Rectangle::Rectangle(int x, int y, int w, int h,
+                     uint8_t r, uint8_t g, uint8_t b, uint8_t a, int thickness)
+    : x(x), y(y), w(w), h(h), r(r), g(g), b(b), a(a), thickness(thickness) {}
+
+void Rectangle::draw(LayerManager &manager, PixelSetter setter) const
 {
-    // Compose the rectangle using four lines
-    addShape(std::make_shared<Line>(x, y, x + w, y, r, g, b, a, thickness));         // Top edge
-    addShape(std::make_shared<Line>(x + w, y, x + w, y + h, r, g, b, a, thickness)); // Right edge
-    addShape(std::make_shared<Line>(x + w, y + h, x, y + h, r, g, b, a, thickness)); // Bottom edge
-    addShape(std::make_shared<Line>(x, y + h, x, y, r, g, b, a, thickness));         // Left edge
+    // Draw the four edges directly — zero heap allocation
+    Line(x, y, x + w, y, r, g, b, a, thickness).draw(manager, setter);         // top
+    Line(x + w, y, x + w, y + h, r, g, b, a, thickness).draw(manager, setter); // right
+    Line(x + w, y + h, x, y + h, r, g, b, a, thickness).draw(manager, setter); // bottom
+    Line(x, y + h, x, y, r, g, b, a, thickness).draw(manager, setter);         // left
 }
 
 // ==========================================
@@ -141,48 +145,50 @@ void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
     float rxIn = rx - halfThick;
     float ryIn = ry - halfThick;
 
-    // Prevent inverted inner bounds on very thick small ellipses
     if (rxIn < 0)
         rxIn = 0;
     if (ryIn < 0)
         ryIn = 0;
 
-    float rxOutSq = rxOut * rxOut;
-    float ryOutSq = ryOut * ryOut;
-    float rxInSq = rxIn * rxIn;
-    float ryInSq = ryIn * ryIn;
+    // Precompute reciprocals — one divide per radius, not one per row
+    float rxOutSqInv = 1.0f / (rxOut * rxOut);
+    float ryOutSqInv = 1.0f / (ryOut * ryOut);
+    float rxInSqInv = (rxIn > 0.0f) ? 1.0f / (rxIn * rxIn) : 0.0f;
+    float ryInSqInv = (ryIn > 0.0f) ? 1.0f / (ryIn * ryIn) : 0.0f;
 
-    // We scanline from the center outwards along the Y axis
-    for (int y = 0; y <= std::ceil(ryOut); ++y)
+    int maxY = static_cast<int>(std::ceil(ryOut));
+
+    for (int y = 0; y <= maxY; ++y)
     {
-        float ySq = y * y;
+        float ySq = static_cast<float>(y * y);
 
-        // 1. Find the outer X boundary for this specific Y row
-        float valOut = 1.0f - (ySq / ryOutSq);
-        int xOut = (valOut >= 0.0f) ? std::round(rxOut * std::sqrt(valOut)) : 0;
+        // Outer X: rx * sqrt(1 - y²/ry²)  — multiply by precomputed inverse
+        float valOut = 1.0f - ySq * ryOutSqInv;
+        int xOut = (valOut >= 0.0f)
+                       ? static_cast<int>(std::round(rxOut * std::sqrt(valOut)))
+                       : 0;
 
-        // 2. Find the inner X boundary (if this row is inside the hollow center)
+        // Inner X: only meaningful inside the hollow region
         int xIn = 0;
-        if (y <= ryIn && ryIn > 0.0f)
+        if (ryIn > 0.0f && y <= static_cast<int>(ryIn))
         {
-            float valIn = 1.0f - (ySq / ryInSq);
-            xIn = (valIn >= 0.0f) ? std::round(rxIn * std::sqrt(valIn)) : 0;
+            float valIn = 1.0f - ySq * ryInSqInv;
+            xIn = (valIn >= 0.0f)
+                      ? static_cast<int>(std::round(rxIn * std::sqrt(valIn)))
+                      : 0;
         }
 
-        // 3. Draw horizontal scanlines connecting the inner and outer bounds
-        // We do all 4 symmetrical quadrants at the same time
+        // Draw the four symmetric scanline spans at once
         for (int x = xIn; x <= xOut; ++x)
         {
-            (manager.*setter)(xc + x, yc + y, r, g, b, a); // Bottom Right
-
+            (manager.*setter)(xc + x, yc + y, r, g, b, a);
             if (x > 0)
-                (manager.*setter)(xc - x, yc + y, r, g, b, a); // Bottom Left
-
+                (manager.*setter)(xc - x, yc + y, r, g, b, a);
             if (y > 0)
             {
-                (manager.*setter)(xc + x, yc - y, r, g, b, a); // Top Right
+                (manager.*setter)(xc + x, yc - y, r, g, b, a);
                 if (x > 0)
-                    (manager.*setter)(xc - x, yc - y, r, g, b, a); // Top Left
+                    (manager.*setter)(xc - x, yc - y, r, g, b, a);
             }
         }
     }

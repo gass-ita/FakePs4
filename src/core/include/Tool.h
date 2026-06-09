@@ -189,6 +189,11 @@ protected:
     int lastX = -1;
     int lastY = -1;
 
+    // Bounding box of the preview drawn last frame.
+    // Used to compute the minimal clear region each move event.
+    int prevPreviewX = 0, prevPreviewY = 0;
+    int prevPreviewW = 0, prevPreviewH = 0;
+
     // Pure virtual functions that child classes MUST implement
     virtual void drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;
     virtual void drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager) = 0;

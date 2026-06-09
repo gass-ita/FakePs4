@@ -50,10 +50,20 @@ public:
     void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
 };
 
-class Rectangle : public ShapeGroup
+// Shape.h — replace the Rectangle class declaration
+class Rectangle : public Shape
 {
 public:
-    Rectangle(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int thickness = 1);
+    int x, y, w, h;
+    uint8_t r, g, b, a;
+    int thickness;
+
+    Rectangle(int x, int y, int w, int h,
+              uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255,
+              int thickness = 1);
+
+    void draw(LayerManager &manager,
+              PixelSetter setter = &LayerManager::setPixel) const override;
 };
 
 class Ellipse : public Shape

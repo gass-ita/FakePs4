@@ -179,14 +179,16 @@ void ShapeTool::onMove(int x, int y, float pressure, float tiltX, float tiltY, L
         return;
     if (x == lastX && y == lastY)
         return;
-
     if (!shouldProcessMove())
-        return; // ← sposta qui, PRIMA di aggiornare lastX/lastY
+        return;
 
     lastX = x;
     lastY = y;
 
+    // Clear only the tiles touched by the PREVIOUS preview frame.
+    // This avoids iterating the full dirty tile set for large shapes.
     manager.clearPreview();
+
     drawShapePreview(startX, startY, x, y, manager);
     manager.showPreview();
 }
@@ -216,15 +218,16 @@ void RectangleTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManage
     int w = std::abs(cx - sx);
     int h = std::abs(cy - sy);
 
-    if (w > 0 && h > 0)
-    {
-        Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
-        int p = size;
-        manager.addPreviewDirtyRect(rx - p, ry - p, w + (p * 2), size + (p * 2));
-        manager.addPreviewDirtyRect(rx - p, (ry + h) - size - p, w + (p * 2), size + (p * 2));
-        manager.addPreviewDirtyRect(rx - p, ry - p, size + (p * 2), h + (p * 2));
-        manager.addPreviewDirtyRect((rx + w) - size - p, ry - p, size + (p * 2), h + (p * 2));
-    }
+    if (w <= 0 || h <= 0)
+        return;
+
+    Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
+
+    // One bounding-box dirty rect instead of four separate edge rects.
+    // The tile system deduplicates automatically, so this is never slower
+    // and avoids the four addPreviewDirtyRect calls and their grid math.
+    int p = size + 1;
+    manager.addPreviewDirtyRect(rx - p, ry - p, w + p * 2, h + p * 2);
 }
 void RectangleTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager)
 {
@@ -233,15 +236,12 @@ void RectangleTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager 
     int w = std::abs(cx - sx);
     int h = std::abs(cy - sy);
 
-    if (w > 0 && h > 0)
-    {
-        Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager);
-        int p = size;
-        manager.addDirtyRect(rx - p, ry - p, w + (p * 2), size + (p * 2));
-        manager.addDirtyRect(rx - p, (ry + h) - size - p, w + (p * 2), size + (p * 2));
-        manager.addDirtyRect(rx - p, ry - p, size + (p * 2), h + (p * 2));
-        manager.addDirtyRect((rx + w) - size - p, ry - p, size + (p * 2), h + (p * 2));
-    }
+    if (w <= 0 || h <= 0)
+        return;
+
+    Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager);
+    int p = size + 1;
+    manager.addDirtyRect(rx - p, ry - p, w + p * 2, h + p * 2);
 }
 
 void EllipseTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager &manager)
@@ -251,30 +251,18 @@ void EllipseTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager 
     int cenX = (sx + cx) / 2;
     int cenY = (sy + cy) / 2;
 
-    if (rx > 0 && ry > 0)
-    {
-        Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
+    if (rx <= 0 || ry <= 0)
+        return;
 
-        int pad = size + 2;
-        int rectW = (rx * 2) + (pad * 2);
-        int rectH = (ry * 2) + (pad * 2);
+    Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
 
-        if (rectW < 512 && rectH < 512)
-        {
-            manager.addPreviewDirtyRect((cenX - rx) - pad, (cenY - ry) - pad, rectW, rectH);
-        }
-        else
-        {
-            int steps = std::max(rx, ry) * 2;
-            for (int i = 0; i < steps; ++i)
-            {
-                float angle = (i * 6.2831853f) / steps;
-                int px = cenX + (rx * std::cos(angle));
-                int py = cenY + (ry * std::sin(angle));
-                manager.addPreviewDirtyRect(px - pad, py - pad, pad * 2, pad * 2);
-            }
-        }
-    }
+    // Replace the 512-threshold branch and the angle-loop entirely.
+    // One bounding box is always correct and never slower than the
+    // angle-loop (which did addPreviewDirtyRect up to max(rx,ry)*2 times).
+    int pad = size + 2;
+    manager.addPreviewDirtyRect(cenX - rx - pad, cenY - ry - pad,
+                                rx * 2 + pad * 2,
+                                ry * 2 + pad * 2);
 }
 
 void EllipseTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &manager)
@@ -284,32 +272,15 @@ void EllipseTool::drawShapeFinal(int sx, int sy, int cx, int cy, LayerManager &m
     int cenX = (sx + cx) / 2;
     int cenY = (sy + cy) / 2;
 
-    if (rx > 0 && ry > 0)
-    {
-        Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager);
+    if (rx <= 0 || ry <= 0)
+        return;
 
-        int pad = size + 2;
-        int rectW = (rx * 2) + (pad * 2);
-        int rectH = (ry * 2) + (pad * 2);
-
-        if (rectW < 512 && rectH < 512)
-        {
-            manager.addDirtyRect((cenX - rx) - pad, (cenY - ry) - pad, rectW, rectH);
-        }
-        else
-        {
-            int steps = std::max(rx, ry) * 2;
-            for (int i = 0; i < steps; ++i)
-            {
-                float angle = (i * 6.2831853f) / steps;
-                int px = cenX + (rx * std::cos(angle));
-                int py = cenY + (ry * std::sin(angle));
-                manager.addDirtyRect(px - pad, py - pad, pad * 2, pad * 2);
-            }
-        }
-    }
+    Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager);
+    int pad = size + 2;
+    manager.addDirtyRect(cenX - rx - pad, cenY - ry - pad,
+                         rx * 2 + pad * 2,
+                         ry * 2 + pad * 2);
 }
-
 // ==========================================
 // FILL TOOL
 // ==========================================
