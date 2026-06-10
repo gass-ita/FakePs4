@@ -12,7 +12,7 @@ class Tool
 {
 protected:
     virtual bool requiresHighFrequency() const { return true; }
-    short int throttleMs = 16;
+    short int throttleMs = 32;
     short int highFreqThrottleMs = 5;
     std::chrono::steady_clock::time_point lastTime;
 
@@ -117,6 +117,9 @@ protected:
     int lastY = 0;
     int prevX = 0;
     int prevY = 0;
+
+    int lastHoverX = -1;
+    int lastHoverY = -1;
 
     int sumX = 0;
     int sumY = 0;

@@ -235,49 +235,74 @@ void LayerManager::renderRegion(int startX, int startY, int rWidth, int rHeight,
         return;
 
     size_t requiredSize = w * h * 4;
-
-    // 1. THE FIX: Only allocate memory if the buffer is too small.
-    // If we call this every frame with the same dimensions, this does zero heap allocations!
     if (outBuffer.size() != requiredSize)
-    {
         outBuffer.resize(requiredSize);
-    }
 
-    // 2. Copy the cached composited image row by row into our buffer
+    // 1. Copy projection cache row by row — unchanged
     for (int y = 0; y < h; ++y)
     {
         int globalIdx = ((y0 + y) * width + x0) * 4;
         int localIdx = (y * w) * 4;
-
         std::copy(projectionCache.begin() + globalIdx,
                   projectionCache.begin() + globalIdx + (w * 4),
                   outBuffer.begin() + localIdx);
     }
 
-    // 3. Add the preview layer on top if it exists
-    if (previewLayer)
+    // 2. Composite preview layer using direct tile access — no virtual calls
+    if (!previewLayer || !previewBBox.valid)
+        return;
+
+    // Clip the preview bbox against the region being rendered
+    int px0 = std::max(x0, previewBBox.x);
+    int py0 = std::max(y0, previewBBox.y);
+    int px1 = std::min(x1, previewBBox.x + previewBBox.w);
+    int py1 = std::min(y1, previewBBox.y + previewBBox.h);
+
+    if (px1 <= px0 || py1 <= py0)
+        return;
+
+    for (int y = py0; y < py1; ++y)
     {
-        for (int y = 0; y < h; ++y)
+        int ty = y >> TILE_BITS;
+        int localY = y & (TILE_SIZE - 1);
+
+        for (int x = px0; x < px1;)
         {
-            for (int x = 0; x < w; ++x)
+            int tx = x >> TILE_BITS;
+            int localX = x & (TILE_SIZE - 1);
+            int count = std::min(px1 - x, TILE_SIZE - localX);
+
+            const Tile *tile = previewLayer->getTile(tx, ty);
+            if (!tile)
             {
-                int localIdx = (y * w + x) * 4;
-                int globalX = x0 + x;
-                int globalY = y0 + y;
+                x += count;
+                continue; // whole chunk is transparent — skip it
+            }
 
-                uint8_t tr, tg, tb, ta;
-                previewLayer->getPixel(globalX, globalY, tr, tg, tb, ta);
+            int localTileBase = (localY * TILE_SIZE + localX) * 4;
+            int outBase = ((y - y0) * w + (x - x0)) * 4;
 
+            for (int i = 0; i < count; ++i)
+            {
+                uint8_t ta = tile->data[localTileBase + 3];
                 if (ta > 0)
                 {
-                    uint8_t &br = outBuffer[localIdx];
-                    uint8_t &bg = outBuffer[localIdx + 1];
-                    uint8_t &bb = outBuffer[localIdx + 2];
-                    uint8_t &ba = outBuffer[localIdx + 3];
+                    uint8_t &br = outBuffer[outBase];
+                    uint8_t &bg = outBuffer[outBase + 1];
+                    uint8_t &bb = outBuffer[outBase + 2];
+                    uint8_t &ba = outBuffer[outBase + 3];
 
-                    blendPixels(br, bg, bb, ba, tr, tg, tb, ta, 1.0f);
+                    blendPixels(br, bg, bb, ba,
+                                tile->data[localTileBase],
+                                tile->data[localTileBase + 1],
+                                tile->data[localTileBase + 2],
+                                ta, 1.0f);
                 }
+                localTileBase += 4;
+                outBase += 4;
             }
+
+            x += count;
         }
     }
 }
@@ -442,39 +467,82 @@ void LayerManager::setPreviewPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b
 
 void LayerManager::addPreviewDirtyRect(int x, int y, int w, int h)
 {
-    int txStart = std::max(0, x / TILE_SIZE);
-    int tyStart = std::max(0, y / TILE_SIZE);
-    int txEnd = std::min(tilesX - 1, (x + w) / TILE_SIZE);
-    int tyEnd = std::min(tilesY - 1, (y + h) / TILE_SIZE);
+    // Clamp to canvas bounds
+    int x0 = std::max(0, x);
+    int y0 = std::max(0, y);
+    int x1 = std::min(width, x + w);
+    int y1 = std::min(height, y + h);
+    if (x1 <= x0 || y1 <= y0)
+        return;
 
-    for (int ty = tyStart; ty <= tyEnd; ++ty)
+    if (!previewBBox.valid)
     {
-        for (int tx = txStart; tx <= txEnd; ++tx)
-        {
-            previewDirtyTiles.insert(ty * tilesX + tx);
-        }
+        previewBBox = {x0, y0, x1 - x0, y1 - y0, true};
+    }
+    else
+    {
+        int nx0 = std::min(previewBBox.x, x0);
+        int ny0 = std::min(previewBBox.y, y0);
+        int nx1 = std::max(previewBBox.x + previewBBox.w, x1);
+        int ny1 = std::max(previewBBox.y + previewBBox.h, y1);
+        previewBBox = {nx0, ny0, nx1 - nx0, ny1 - ny0, true};
     }
 }
-
 void LayerManager::clearPreview()
 {
-    for (int tileIndex : previewDirtyTiles)
-    {
-        int tx = tileIndex % tilesX;
-        int ty = tileIndex / tilesX;
-        markRegionDirty(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE, true);
-    }
+    if (!previewBBox.valid)
+        return;
+
+    markRegionDirty(previewBBox.x, previewBBox.y,
+                    previewBBox.w, previewBBox.h, true);
 
     previewLayer->clear();
-    previewDirtyTiles.clear();
+    previewBBox.valid = false;
 }
 
 void LayerManager::showPreview()
 {
-    for (int tileIndex : previewDirtyTiles)
+    if (!previewBBox.valid)
+        return;
+
+    markRegionDirty(previewBBox.x, previewBBox.y,
+                    previewBBox.w, previewBBox.h, true);
+}
+
+void LayerManager::fillPreviewSpan(int x, int y, int length,
+                                   uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    // Clamp the span to canvas bounds
+    int x0 = std::max(0, x);
+    int x1 = std::min(width, x + length);
+    if (x0 >= x1 || y < 0 || y >= height)
+        return;
+
+    int ty = y >> TILE_BITS;
+    int localY = y & (TILE_SIZE - 1);
+
+    for (int px = x0; px < x1;)
     {
-        int tx = tileIndex % tilesX;
-        int ty = tileIndex / tilesX;
-        markRegionDirty(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE, true);
+        int tx = px >> TILE_BITS;
+        int localX = px & (TILE_SIZE - 1);
+        int count = std::min(x1 - px, TILE_SIZE - localX);
+
+        int tileIdx = ty * tilesX + tx;
+        if (!previewLayer->tiles[tileIdx])
+            previewLayer->tiles[tileIdx] = previewLayer->createTile();
+
+        uint8_t *data = previewLayer->tiles[tileIdx]->data.data();
+        int base = (localY * TILE_SIZE + localX) * 4;
+
+        for (int i = 0; i < count; ++i)
+        {
+            data[base] = r;
+            data[base + 1] = g;
+            data[base + 2] = b;
+            data[base + 3] = a;
+            base += 4;
+        }
+
+        px += count;
     }
 }

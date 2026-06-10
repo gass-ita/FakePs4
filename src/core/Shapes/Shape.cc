@@ -5,7 +5,7 @@
 Line::Line(int x0, int y0, int x1, int y1, uint8_t r, uint8_t g, uint8_t b, uint8_t a, int thickness)
     : x0(x0), y0(y0), x1(x1), y1(y1), r(r), g(g), b(b), a(a), thickness(thickness) {}
 
-void Line::draw(LayerManager &manager, PixelSetter setter) const
+void Line::draw(LayerManager &manager, PixelSetter setter, SpanFiller spanFill) const
 {
     int x_curr = x0;
     int y_curr = y0;
@@ -108,12 +108,12 @@ void ShapeGroup::addShape(std::shared_ptr<Shape> shape)
     children.push_back(shape);
 }
 
-void ShapeGroup::draw(LayerManager &manager, PixelSetter setter) const
+void ShapeGroup::draw(LayerManager &manager, PixelSetter setter, SpanFiller spanFill) const
 {
     // A group simply tells all its children to draw themselves!
     for (const auto &child : children)
     {
-        child->draw(manager, setter);
+        child->draw(manager, setter, spanFill);
     }
 }
 
@@ -122,13 +122,36 @@ Rectangle::Rectangle(int x, int y, int w, int h,
                      uint8_t r, uint8_t g, uint8_t b, uint8_t a, int thickness)
     : x(x), y(y), w(w), h(h), r(r), g(g), b(b), a(a), thickness(thickness) {}
 
-void Rectangle::draw(LayerManager &manager, PixelSetter setter) const
+void Rectangle::draw(LayerManager &manager, PixelSetter setter, SpanFiller spanFill) const
 {
-    // Draw the four edges directly — zero heap allocation
-    Line(x, y, x + w, y, r, g, b, a, thickness).draw(manager, setter);         // top
-    Line(x + w, y, x + w, y + h, r, g, b, a, thickness).draw(manager, setter); // right
-    Line(x + w, y + h, x, y + h, r, g, b, a, thickness).draw(manager, setter); // bottom
-    Line(x, y + h, x, y, r, g, b, a, thickness).draw(manager, setter);         // left
+
+    if (spanFill)
+    {
+        int half = thickness / 2;
+
+        // Top edge
+        for (int dy = -half; dy <= half; ++dy)
+            (manager.*spanFill)(x - half, y + dy, w + thickness, r, g, b, a);
+
+        // Bottom edge
+        for (int dy = -half; dy <= half; ++dy)
+            (manager.*spanFill)(x - half, y + h + dy, w + thickness, r, g, b, a);
+
+        // Left edge (between top and bottom)
+        for (int row = y + half + 1; row < y + h - half; ++row)
+            (manager.*spanFill)(x - half, row, thickness, r, g, b, a);
+
+        // Right edge (between top and bottom)
+        for (int row = y + half + 1; row < y + h - half; ++row)
+            (manager.*spanFill)(x + w - half, row, thickness, r, g, b, a);
+    }
+    else
+    {
+        Line(x, y, x + w, y, r, g, b, a, thickness).draw(manager, setter);
+        Line(x + w, y, x + w, y + h, r, g, b, a, thickness).draw(manager, setter);
+        Line(x + w, y + h, x, y + h, r, g, b, a, thickness).draw(manager, setter);
+        Line(x, y + h, x, y, r, g, b, a, thickness).draw(manager, setter);
+    }
 }
 
 // ==========================================
@@ -137,7 +160,7 @@ void Rectangle::draw(LayerManager &manager, PixelSetter setter) const
 Ellipse::Ellipse(int xc, int yc, int rx, int ry, uint8_t r, uint8_t g, uint8_t b, uint8_t a, int thickness)
     : xc(xc), yc(yc), rx(rx), ry(ry), r(r), g(g), b(b), a(a), thickness(thickness) {}
 
-void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
+void Ellipse::draw(LayerManager &manager, PixelSetter setter, SpanFiller spanFill) const
 {
     float halfThick = thickness / 2.0f;
     float rxOut = rx + halfThick;
@@ -150,7 +173,6 @@ void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
     if (ryIn < 0)
         ryIn = 0;
 
-    // Precompute reciprocals — one divide per radius, not one per row
     float rxOutSqInv = 1.0f / (rxOut * rxOut);
     float ryOutSqInv = 1.0f / (ryOut * ryOut);
     float rxInSqInv = (rxIn > 0.0f) ? 1.0f / (rxIn * rxIn) : 0.0f;
@@ -162,13 +184,11 @@ void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
     {
         float ySq = static_cast<float>(y * y);
 
-        // Outer X: rx * sqrt(1 - y²/ry²)  — multiply by precomputed inverse
         float valOut = 1.0f - ySq * ryOutSqInv;
         int xOut = (valOut >= 0.0f)
                        ? static_cast<int>(std::round(rxOut * std::sqrt(valOut)))
                        : 0;
 
-        // Inner X: only meaningful inside the hollow region
         int xIn = 0;
         if (ryIn > 0.0f && y <= static_cast<int>(ryIn))
         {
@@ -178,17 +198,37 @@ void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
                       : 0;
         }
 
-        // Draw the four symmetric scanline spans at once
-        for (int x = xIn; x <= xOut; ++x)
+        if (spanFill)
         {
-            (manager.*setter)(xc + x, yc + y, r, g, b, a);
-            if (x > 0)
-                (manager.*setter)(xc - x, yc + y, r, g, b, a);
+            // Bottom half: two spans per row (left side and right side)
+            // Right span: xc+xIn to xc+xOut
+            (manager.*spanFill)(xc + xIn, yc + y, xOut - xIn + 1, r, g, b, a);
+            // Left span: xc-xOut to xc-xIn (only if xIn < xOut to avoid overlap at center)
+            if (xIn < xOut)
+                (manager.*spanFill)(xc - xOut, yc + y, xOut - xIn, r, g, b, a);
+
+            // Top half (mirror)
             if (y > 0)
             {
-                (manager.*setter)(xc + x, yc - y, r, g, b, a);
+                (manager.*spanFill)(xc + xIn, yc - y, xOut - xIn + 1, r, g, b, a);
+                if (xIn < xOut)
+                    (manager.*spanFill)(xc - xOut, yc - y, xOut - xIn, r, g, b, a);
+            }
+        }
+        else
+        {
+            // Original per-pixel path for drawing to the real layer
+            for (int x = xIn; x <= xOut; ++x)
+            {
+                (manager.*setter)(xc + x, yc + y, r, g, b, a);
                 if (x > 0)
-                    (manager.*setter)(xc - x, yc - y, r, g, b, a);
+                    (manager.*setter)(xc - x, yc + y, r, g, b, a);
+                if (y > 0)
+                {
+                    (manager.*setter)(xc + x, yc - y, r, g, b, a);
+                    if (x > 0)
+                        (manager.*setter)(xc - x, yc - y, r, g, b, a);
+                }
             }
         }
     }
@@ -198,7 +238,7 @@ void Ellipse::draw(LayerManager &manager, PixelSetter setter) const
 CircleOutline::CircleOutline(int xc, int yc, int size, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
     : xc(xc), yc(yc), size(size), r(r), g(g), b(b), a(a) {}
 
-void CircleOutline::draw(LayerManager &manager, PixelSetter setter) const
+void CircleOutline::draw(LayerManager &manager, PixelSetter setter, SpanFiller spanFill) const
 {
     int radius = size / 2;
     if (radius == 0)
@@ -241,7 +281,7 @@ void CircleOutline::draw(LayerManager &manager, PixelSetter setter) const
 
 SprayShape::SprayShape(int xc, int yc, uint8_t r, uint8_t g, uint8_t b, uint8_t a, int size, float density) : xc(xc), yc(yc), r(r), g(g), b(b), a(a), size(size), density(density) {}
 
-void SprayShape::draw(LayerManager &manager, PixelSetter setter) const
+void SprayShape::draw(LayerManager &manager, PixelSetter setter, SpanFiller spanFill) const
 {
     // generate 2 random numbers a radius and an angle
     for (int i = 0; i < size * density; ++i) // number of dots is proportional to size

@@ -33,6 +33,8 @@ public:
     const Tile *getTile(int tileX, int tileY) const;
     void clear() override;
     void fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a) override = 0;
+
+    friend class LayerManager; // Allow LayerManager to access protected members for rendering and caching
 };
 
 #endif // TILEDLAYER_H

@@ -121,6 +121,13 @@ void StrokeTool::onHover(int x, int y, LayerManager &manager)
     if (isDrawing)
         return;
 
+    // Don't redraw the cursor if it hasn't moved
+    if (x == lastHoverX && y == lastHoverY)
+        return;
+
+    lastHoverX = x;
+    lastHoverY = y;
+
     manager.clearPreview();
     drawHoverCursor(x, y, manager);
 
@@ -221,7 +228,7 @@ void RectangleTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManage
     if (w <= 0 || h <= 0)
         return;
 
-    Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
+    Rectangle(rx, ry, w, h, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel, &LayerManager::fillPreviewSpan);
 
     // One bounding-box dirty rect instead of four separate edge rects.
     // The tile system deduplicates automatically, so this is never slower
@@ -254,7 +261,7 @@ void EllipseTool::drawShapePreview(int sx, int sy, int cx, int cy, LayerManager 
     if (rx <= 0 || ry <= 0)
         return;
 
-    Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel);
+    Ellipse(cenX, cenY, rx, ry, r, g, b, a, size).draw(manager, &LayerManager::setPreviewPixel, &LayerManager::fillPreviewSpan);
 
     // Replace the 512-threshold branch and the angle-loop entirely.
     // One bounding box is always correct and never slower than the

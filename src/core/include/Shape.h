@@ -7,13 +7,16 @@
 #include <cstdint>
 
 using PixelSetter = void (LayerManager::*)(int, int, uint8_t, uint8_t, uint8_t, uint8_t);
+using SpanFiller = void (LayerManager::*)(int, int, int, uint8_t, uint8_t, uint8_t, uint8_t);
 
 // 1. The Component Interface
 class Shape
 {
 public:
     virtual ~Shape() = default;
-    virtual void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const = 0;
+    virtual void draw(LayerManager &manager,
+                      PixelSetter setter = &LayerManager::setPixel,
+                      SpanFiller spanFill = nullptr) const = 0;
 };
 
 class Line : public Shape
@@ -24,7 +27,7 @@ public:
     int thickness;
 
     Line(int x0, int y0, int x1, int y1, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int thickness = 1);
-    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
+    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel, SpanFiller spanFill = nullptr) const override;
 };
 
 class SprayShape : public Shape
@@ -37,7 +40,7 @@ private:
 
 public:
     SprayShape(int xc, int yc, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int size = 10, float density = 1.0f);
-    virtual void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
+    virtual void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel, SpanFiller spanFill = nullptr) const override;
 };
 
 // composite shape
@@ -47,7 +50,7 @@ public:
     std::vector<std::shared_ptr<Shape>> children;
 
     void addShape(std::shared_ptr<Shape> shape);
-    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
+    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel, SpanFiller spanFill = nullptr) const override;
 };
 
 // Shape.h — replace the Rectangle class declaration
@@ -63,7 +66,8 @@ public:
               int thickness = 1);
 
     void draw(LayerManager &manager,
-              PixelSetter setter = &LayerManager::setPixel) const override;
+              PixelSetter setter = &LayerManager::setPixel,
+              SpanFiller spanFill = nullptr) const override;
 };
 
 class Ellipse : public Shape
@@ -75,7 +79,7 @@ public:
     int thickness;
 
     Ellipse(int xc, int yc, int rx, int ry, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255, int thickness = 1);
-    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
+    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel, SpanFiller spanFill = nullptr) const override;
 };
 
 class CircleOutline : public Shape
@@ -85,7 +89,7 @@ public:
     uint8_t r, g, b, a;
 
     CircleOutline(int xc, int yc, int size, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
-    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel) const override;
+    void draw(LayerManager &manager, PixelSetter setter = &LayerManager::setPixel, SpanFiller spanFill = nullptr) const override;
 };
 
 #endif // SHAPE_H

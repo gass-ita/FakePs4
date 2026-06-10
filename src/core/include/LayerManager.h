@@ -41,7 +41,12 @@ private:
 
     // preview logic
     std::shared_ptr<ColorLayer> previewLayer;
-    std::unordered_set<int> previewDirtyTiles;
+    struct PreviewBBox
+    {
+        int x = 0, y = 0, w = 0, h = 0;
+        bool valid = false;
+    };
+    PreviewBBox previewBBox;
 
 public:
     LayerManager(int width, int height);
@@ -99,6 +104,7 @@ public:
     bool saveProject(const std::string &filepath) const;
     bool loadProject(const std::string &filepath);
     // A simple struct to hold rectangle data
+    void fillPreviewSpan(int x, int y, int length, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
 private:
     // Helper function for the alpha blending math
