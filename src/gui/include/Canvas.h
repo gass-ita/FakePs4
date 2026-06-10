@@ -51,6 +51,8 @@ public:
     void setLayerVisibility(int index, bool visible);
     void setLayerName(int index, const QString &name);
 
+    bool exportToPNG(const QString &filePath);
+
     LayerManager &getLayerManager() { return layerManager; }
 
 protected:

@@ -63,8 +63,8 @@ public:
 
     void markRegionDirty(int x, int y, int w, int h, bool skipCache = false);
 
-    void renderRegion(int startX, int startY, int rWidth, int rHeight, std::vector<uint8_t> &outBuffer) const;
-    void render(std::vector<uint8_t> &outBuffer) const;
+    void renderRegion(int startX, int startY, int rWidth, int rHeight, std::vector<uint8_t> &outBuffer, bool includePreview = true) const;
+    void render(std::vector<uint8_t> &outBuffer, bool includePreview = true) const;
 
     void setActiveLayer(size_t index);
 

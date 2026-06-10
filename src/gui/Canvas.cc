@@ -40,6 +40,25 @@ void Canvas::setLayerName(int index, const QString &name)
     layerManager.setLayerName(index, name.toStdString());
 }
 
+bool Canvas::exportToPNG(const QString &filePath)
+{
+    int w = layerManager.getWidth();
+    int h = layerManager.getHeight();
+
+    // 1. Allocate a temporary buffer large enough to hold the ENTIRE image
+    // (4 bytes per pixel for RGBA)
+    std::vector<uint8_t> fullBuffer(w * h * 4);
+
+    // 2. Ask the core engine to composite every layer into this new buffer
+    layerManager.renderRegion(0, 0, w, h, fullBuffer, false);
+
+    // 3. Wrap the raw memory in a Qt Image container
+    QImage exportImage(fullBuffer.data(), w, h, w * 4, QImage::Format_RGBA8888);
+
+    // 4. Save it to disk! (Qt automatically detects the PNG format from the file extension)
+    return exportImage.save(filePath, "PNG");
+}
+
 // ==========================================
 // VIEWPORT MATH
 // ==========================================

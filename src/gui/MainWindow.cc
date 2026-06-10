@@ -568,6 +568,47 @@ MainWindow::MainWindow(int canvasWidth, int canvasHeight, const QString &filePat
         } });
     // Saving and Loading
     // ==========================================
+    // EXPORT TO PNG (Ctrl+E)
+    // ==========================================
+    QAction *exportAction = toolbar->addAction("Export PNG");
+    QShortcut *exportShortcut = new QShortcut(QKeySequence("Ctrl+E"), this);
+
+    // A lambda to handle the export so both the button and shortcut can use it
+    auto triggerExport = [this]()
+    {
+        // Default to the user's Pictures folder
+        QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + "/artwork.png";
+
+        QString filePath = QFileDialog::getSaveFileName(
+            this,
+            "Export Image",
+            defaultPath,
+            "PNG Image (*.png)");
+
+        if (!filePath.isEmpty())
+        {
+            // Force the .png extension if the user forgot to type it
+            if (!filePath.endsWith(".png", Qt::CaseInsensitive))
+            {
+                filePath += ".png";
+            }
+
+            if (canvas->exportToPNG(filePath))
+            {
+                QMessageBox::information(this, "Success", "Image exported successfully!");
+            }
+            else
+            {
+                QMessageBox::critical(this, "Error", "Failed to export the image.");
+            }
+        }
+    };
+
+    // Connect both the toolbar button and the keyboard shortcut to the lambda
+    connect(exportAction, &QAction::triggered, this, triggerExport);
+    connect(exportShortcut, &QShortcut::activated, this, triggerExport);
+
+    // ==========================================
     // SAVE NATIVE PROJECT (Ctrl+S)
     // ==========================================
     QShortcut *saveShortcut = new QShortcut(QKeySequence::Save, this);

@@ -221,7 +221,7 @@ void LayerManager::updateCache(int startX, int startY, int rWidth, int rHeight)
     }
 }
 
-void LayerManager::renderRegion(int startX, int startY, int rWidth, int rHeight, std::vector<uint8_t> &outBuffer) const
+void LayerManager::renderRegion(int startX, int startY, int rWidth, int rHeight, std::vector<uint8_t> &outBuffer, bool includePreview) const
 {
     int x0 = std::max(0, startX);
     int y0 = std::max(0, startY);
@@ -249,7 +249,7 @@ void LayerManager::renderRegion(int startX, int startY, int rWidth, int rHeight,
     }
 
     // 2. Composite preview layer using direct tile access — no virtual calls
-    if (!previewLayer || !previewBBox.valid)
+    if (!previewLayer || !previewBBox.valid || !includePreview)
         return;
 
     // Clip the preview bbox against the region being rendered
@@ -307,9 +307,9 @@ void LayerManager::renderRegion(int startX, int startY, int rWidth, int rHeight,
     }
 }
 
-void LayerManager::render(std::vector<uint8_t> &outBuffer) const
+void LayerManager::render(std::vector<uint8_t> &outBuffer, bool includePreview) const
 {
-    renderRegion(0, 0, width, height, outBuffer);
+    renderRegion(0, 0, width, height, outBuffer, includePreview);
 }
 
 void LayerManager::blendPixels(uint8_t &outR, uint8_t &outG, uint8_t &outB, uint8_t &outA,

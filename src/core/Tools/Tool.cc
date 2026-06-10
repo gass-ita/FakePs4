@@ -636,18 +636,31 @@ void MaskBrushTool::stampMask(int cx, int cy, LayerManager &manager)
             if (finalAlpha == 0)
                 continue; // guard for rounding to zero
 
-            // Read the canvas pixel under the stamp
             uint8_t bgR, bgG, bgB, bgA;
             manager.getPixel(canvasX, canvasY, bgR, bgG, bgB, bgA);
 
-            // Alpha-blend: out = src * alpha + dst * (1 - alpha)
-            const float alphaF = finalAlpha / 255.0f;
-            const float invAlpha = 1.0f - alphaF;
+            uint8_t outR, outG, outB, outA;
 
-            const uint8_t outR = static_cast<uint8_t>(r * alphaF + bgR * invAlpha);
-            const uint8_t outG = static_cast<uint8_t>(g * alphaF + bgG * invAlpha);
-            const uint8_t outB = static_cast<uint8_t>(b * alphaF + bgB * invAlpha);
-            const uint8_t outA = static_cast<uint8_t>(std::min(255, bgA + finalAlpha));
+            if (bgA == 0)
+            {
+                // Destination is fully transparent — no background color to blend with.
+                // Write the brush color directly, only carrying the mask alpha.
+                outR = r;
+                outG = g;
+                outB = b;
+                outA = finalAlpha;
+            }
+            else
+            {
+                // Normal alpha-over composite
+                const float alphaF = finalAlpha / 255.0f;
+                const float invAlpha = 1.0f - alphaF;
+
+                outR = static_cast<uint8_t>(r * alphaF + bgR * invAlpha);
+                outG = static_cast<uint8_t>(g * alphaF + bgG * invAlpha);
+                outB = static_cast<uint8_t>(b * alphaF + bgB * invAlpha);
+                outA = static_cast<uint8_t>(std::min(255, bgA + finalAlpha));
+            }
 
             manager.setPixel(canvasX, canvasY, outR, outG, outB, outA);
         }
