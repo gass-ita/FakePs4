@@ -143,7 +143,7 @@ MainWindow::MainWindow(int canvasWidth, int canvasHeight, const QString &filePat
     sizeTextBox->setFixedWidth(50);
     sizeTextBox->setText("5");
     QSlider *sizeSlider = new QSlider(Qt::Horizontal);
-    sizeSlider->setRange(1, 150); // Brush size from 1px to 50px
+    sizeSlider->setRange(1, 500); // Brush size from 1px to 50px
     sizeSlider->setValue(5);      // Default to 5
     sizeSlider->setFixedWidth(150);
     toolbar->addWidget(sizeTextBox);

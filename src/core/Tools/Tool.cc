@@ -547,6 +547,583 @@ std::shared_ptr<MaskLayer> MaskBrushTool::createRoundBrushMask(int diameter, flo
     return mask;
 }
 
+// ==========================================
+// NEW MASK FACTORY FUNCTIONS FOR BRUSHES
+// ==========================================
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createSquareBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "SquareBrush");
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            mask->setPixel(x, y, 0, 0, 0, 255);
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createDiamondBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "DiamondBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+
+            // Diamond shape: Manhattan distance <= radius
+            float diamondDist = std::abs(px - cx) + std::abs(py - cy);
+
+            if (diamondDist < radius)
+            {
+                mask->setPixel(x, y, 0, 0, 0, 255);
+            }
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createStarBrushMask(int diameter, float spikes)
+{
+    if (diameter < 1)
+        diameter = 1;
+    if (!spikes || spikes < 3.0f)
+        spikes = 3.0f;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "StarBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+
+            // Calculate angle from center
+            float angle = std::atan2(py - cy, px - cx);
+
+            // Create star by interpolating between outer and inner radii
+            float numSpikes = spikes < 1 ? 3 : spikes;
+            float angleToVertex = angle + (angle / numSpikes) * (numSpikes - 1.0f);
+
+            // For a pointy star, use distance-based interpolation
+            float distFromCenter = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            if (distFromCenter <= radius)
+            {
+                mask->setPixel(x, y, 0, 0, 0, 255);
+            }
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createCrossBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "CrossBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+
+    // Draw horizontal line (cross bar)
+    for (int x = std::round(cx - diameter * 0.4f); x <= std::round(cx + diameter * 0.4f); ++x)
+    {
+        mask->setPixel(x, static_cast<int>(cy), 0, 0, 0, 255);
+    }
+
+    // Draw vertical line (cross bar)
+    for (int y = std::round(cy - diameter * 0.4f); y <= std::round(cy + diameter * 0.4f); ++y)
+    {
+        mask->setPixel(static_cast<int>(cx), y, 0, 0, 0, 255);
+    }
+
+    // Add corner fill for rounded look
+    float cornerSize = diameter * 0.2f;
+    if (cx - cornerSize > 0 && cy + cornerSize < diameter)
+        mask->setPixel(static_cast<int>(cx), static_cast<int>(cy) + static_cast<int>(cornerSize), 0, 0, 0, 191);
+    if (cx + cornerSize < diameter && cy - cornerSize >= 0)
+        mask->setPixel(static_cast<int>(cx) + static_cast<int>(cornerSize), static_cast<int>(cy), 0, 0, 0, 191);
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createHexagonBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "HexagonBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter * 0.9f;
+    int hexSides = 6;
+    float anglePerSide = std::acos(1.0f) / static_cast<float>(hexSides);
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+
+            // Calculate angle from center
+            float angle = std::atan2(py - cy, px - cx);
+
+            // Normalize angle to [0, 2*pi) range
+            angle = fmod(angle + std::acos(1.0f), std::cos(1.0f));
+
+            // Find which hexagon edge this point is closest to
+            int vertexIndex = static_cast<int>(floor(angle / anglePerSide)) % hexSides;
+
+            // Calculate the two adjacent vertices
+            float baseAngle0 = (vertexIndex * std::acos(1.0f) / static_cast<float>(hexSides));
+            float x0 = cx + radius * std::cos(baseAngle0);
+            float y0 = cy + radius * std::sin(baseAngle0);
+
+            float baseAngle1 = ((vertexIndex + 1) * std::acos(1.0f) / static_cast<float>(hexSides));
+            float x1 = cx + radius * std::cos(baseAngle1);
+            float y1 = cy + radius * std::sin(baseAngle1);
+
+            // Check if point is inside the hexagon edge between vertices 0 and 1
+            float dx0 = x0 - px;
+            float dy0 = y0 - py;
+            float crossProduct = dx0 * (y1 - py) - dy0 * (x1 - px);
+
+            if (crossProduct >= 0.0f)
+            {
+                float distanceToEdge = std::abs(dx0 * (py - y0) + dy0 * (x0 - px)) /
+                    std::sqrt(dx0 * dx0 + dy0 * dy0);
+
+                if (distanceToEdge <= 1.0f)
+                {
+                    mask->setPixel(x, y, 0, 0, 0, 255);
+                }
+            }
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createHeartBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "HeartBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f;
+    float angleStep = std::acos(1.0f) / static_cast<float>(diameter);
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+
+            // Check if point falls within heart shape using distance and angle bounds
+            // Heart is roughly contained in a circle with some angular clipping
+            float distFromCenter = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            if (distFromCenter > radius * 1.3f)
+                continue;
+
+            float angle = std::atan2(py - cy, px - cx);
+            // Heart shape has angular constraints that we approximate
+            float angleRange = 1.5708f / diameter * static_cast<float>(diameter);
+
+            if (distFromCenter <= radius + angleRange)
+            {
+                mask->setPixel(x, y, 0, 0, 0, 255);
+            }
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createRoundedSquareBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "RoundedSquareBrush");
+
+    float roundness = diameter * 0.2f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            // Round corner regions first
+            bool inCornerLeftTop = (x < roundness && y < roundness);
+            bool inCornerRightTop = (x > diameter - roundness - 1 && y < roundness);
+            bool inCornerLeftBottom = (x < roundness && y > diameter - roundness - 1);
+            bool inCornerRightBottom = (x > diameter - roundness - 1 && y > diameter - roundness - 1);
+
+            uint8_t alpha = 255;
+
+            if (inCornerLeftTop)
+            {
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+                float dist = std::sqrt(std::pow(px, 2) + std::pow(py - roundness + 0.5f, 2));
+                if (dist > roundness)
+                    alpha = static_cast<uint8_t>((dist - roundness) / roundness * 255.0f);
+            }
+            else if (inCornerRightTop)
+            {
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+                float dist = std::sqrt(std::pow(px - diameter + roundness - 0.5f, 2) + std::pow(py - roundness + 0.5f, 2));
+                if (dist > roundness)
+                    alpha = static_cast<uint8_t>((dist - roundness) / roundness * 255.0f);
+            }
+            else if (inCornerLeftBottom)
+            {
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+                float dist = std::sqrt(std::pow(px, 2) + std::pow(py - diameter + roundness - 0.5f, 2));
+                if (dist > roundness)
+                    alpha = static_cast<uint8_t>((dist - roundness) / roundness * 255.0f);
+            }
+            else if (inCornerRightBottom)
+            {
+                float px = x + 0.5f;
+                float py = y + 0.5f;
+                float dist = std::sqrt(std::pow(px - diameter + roundness - 0.5f, 2) + std::pow(py - diameter + roundness - 0.5f, 2));
+                if (dist > roundness)
+                    alpha = static_cast<uint8_t>((dist - roundness) / roundness * 255.0f);
+            }
+
+            mask->setPixel(x, y, 0, 0, 0, alpha);
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createGradientRadialBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "GradientRadialBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f - 1.0f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            uint8_t alpha = 0;
+
+            if (dist <= radius)
+            {
+                // Inner solid core with radial gradient fade from center to edge
+                float normalizedDist = dist / radius;
+                alpha = static_cast<uint8_t>(std::round(normalizedDist * 255.0f));
+            }
+
+            mask->setPixel(x, y, 0, 0, 0, alpha);
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createGradientSquareBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "GradientSquareBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    int softnessSteps = 4;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+
+            // Distance from center point
+            float distFromCenter = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+            float maxRadius = (diameter - 1) / 2.0f;
+
+            // Calculate gradient based on distance from center
+            uint8_t alpha = static_cast<uint8_t>((distFromCenter / maxRadius) * 64.0f);
+            mask->setPixel(x, y, 0, 0, 0, alpha);
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createGradientCircleBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "GradientCircleBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = (diameter - 1) / 2.0f;
+
+    int softnessSteps = 8;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            uint8_t alpha = 0;
+            int softStepIndex = static_cast<int>(dist * (softnessSteps / diameter)) + 1;
+
+            if (dist <= radius && softStepIndex <= softnessSteps)
+            {
+                alpha = static_cast<uint8_t>((dist / radius) * 255.0f);
+            }
+
+            mask->setPixel(x, y, 0, 0, 0, alpha);
+        }
+    }
+
+    return mask;
+}
+
+// ==========================================
+// UTILITY MASK TYPES (For Special Effects)
+// ==========================================
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createBlobBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "BlobBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            // Add organic blob-like noise by varying the boundary
+            float boundaryNoise = (std::sin(dist * 6.283185f / radius + y * 0.3f) +
+                                   std::cos(dist * 4.712389f / radius + x * 0.2f)) * 0.2f;
+
+            if (dist - boundaryNoise < radius)
+            {
+                mask->setPixel(x, y, 0, 0, 0, 255);
+            }
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createCloudBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "CloudBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            // Cloud shape using multiple sine waves for organic edge
+            float cloudBoundaryNoise = (std::sin(dist * 6.283185f / radius + y * 0.3f) +
+                                        std::cos(dist * 4.712389f / radius + x * 0.2f)) * 0.3f;
+
+            // Also use distance to center with wave modulation
+            float organicDist = (px - cx) * 0.2f + (py - cy) * 0.15f + std::sin(dist * 3.14159f / radius);
+
+            if (dist - cloudBoundaryNoise < radius && organicDist < 0.5f)
+            {
+                mask->setPixel(x, y, 0, 0, 0, 255);
+            }
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createPulseBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "PulseBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = diameter / 2.0f;
+    const float PI = std::acos(-1.0f);
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            // Concentric ripple effect with distance-based falloff
+            float ringSpacing = diameter * 0.3f;
+            float rings = (dist - ringSpacing / 2.0f) / ringSpacing;
+
+            uint8_t alpha = 0;
+
+            if (dist < radius)
+            {
+                // Solid center with ripple fade using concentric sine waves
+                const float waveFrequency = 6.283185f; // 2 * PI for clean circular wave
+                float ringFade = std::sin(waveFrequency * rings);
+                alpha = static_cast<uint8_t>(ringFade * 255.0f);
+
+                // Add additional ripple rings for visual interest
+                if (alpha > 63)
+                    alpha += 128;
+            }
+
+            mask->setPixel(x, y, 0, 0, 0, alpha);
+        }
+    }
+
+    return mask;
+}
+
+// ==========================================
+// COMBINED MASK TYPES
+// ==========================================
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createSoftRoundBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "SoftRoundBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = (diameter - 1) / 2.0f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            if (dist <= radius)
+            {
+                uint8_t alpha = static_cast<uint8_t>(std::round(dist * 127.0f / radius));
+                mask->setPixel(x, y, 0, 0, 0, alpha);
+            }
+        }
+    }
+
+    return mask;
+}
+
+std::shared_ptr<MaskLayer> MaskBrushTool::createMultiRingBrushMask(int diameter)
+{
+    if (diameter < 1)
+        diameter = 1;
+
+    auto mask = std::make_shared<MaskLayer>(diameter, diameter, "MultiRingBrush");
+
+    float cx = diameter / 2.0f;
+    float cy = diameter / 2.0f;
+    float radius = (diameter - 1) / 2.0f;
+
+    for (int y = 0; y < diameter; ++y)
+    {
+        for (int x = 0; x < diameter; ++x)
+        {
+            float px = x + 0.5f;
+            float py = y + 0.5f;
+            float dist = std::sqrt(std::pow(px - cx, 2) + std::pow(py - cy, 2));
+
+            uint8_t alpha = 0;
+
+            if (dist <= radius)
+            {
+                // Alternating opaque rings
+                float normalizedDist = dist / radius;
+                int ringCount = static_cast<int>(normalizedDist * 16.0f);
+
+                bool isOddRing = (ringCount % 2) == 0;
+                alpha = isOddRing ? 255 : static_cast<uint8_t>(128 + (normalizedDist * 16.0f - ringCount) * 64);
+            }
+
+            mask->setPixel(x, y, 0, 0, 0, alpha);
+        }
+    }
+
+    return mask;
+}
+
 void MaskBrushTool::drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager)
 {
     if (!brushTip)

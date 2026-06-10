@@ -169,6 +169,27 @@ public:
     // hardness: 0.0f (Airbrush) to 1.0f (Hard Pen)
     static std::shared_ptr<MaskLayer> createRoundBrushMask(int diameter, float hardness = 0.8f);
 
+    // Geometric shapes
+    static std::shared_ptr<MaskLayer> createSquareBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createDiamondBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createStarBrushMask(int diameter, float spikes = 5.0f);
+    static std::shared_ptr<MaskLayer> createCrossBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createHexagonBrushMask(int diameter);
+
+    // Organic/special shapes
+    static std::shared_ptr<MaskLayer> createHeartBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createGradientSquareBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createGradientCircleBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createBlobBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createCloudBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createPulseBrushMask(int diameter);
+
+    // Rounded edges
+    static std::shared_ptr<MaskLayer> createRoundedSquareBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createGradientRadialBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createSoftRoundBrushMask(int diameter);
+    static std::shared_ptr<MaskLayer> createMultiRingBrushMask(int diameter);
+
 protected:
     void drawLineSegment(int x0, int y0, int x1, int y1, LayerManager &manager) override;
     void drawHoverCursor(int x, int y, LayerManager &manager) override;

@@ -153,6 +153,7 @@ void Canvas::mouseMoveEvent(QMouseEvent *event)
         panOffset += delta;
         lastPanPos = event->pos();
         update(); // Canvas must update itself when panning
+        syncScrollbars();
         return;
     }
 
@@ -174,6 +175,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent *event)
     if (event->button() == Qt::MiddleButton)
     {
         isPanning = false;
+        syncScrollbars();
     }
     else if (event->button() == Qt::LeftButton && layerManager.getActiveTool())
     {
